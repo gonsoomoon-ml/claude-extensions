@@ -1,0 +1,10 @@
+{
+  "name": "deck-design",
+  "version": "0.1.0",
+  "description": "Build slide decks that survive critic review. Bundles two skills: deck-mindset (5-color vocabulary on dark backgrounds + 15pt floor + 3-tier hierarchy + 5 named layouts + 8 card families) and deck-agent-team (Phase-2 review via parallel critic agents — visual + content + cognitive + compliance — with PASS/FAIL gate and human-checked patch apply). Use when designing or auditing presentations that prioritize consistency and audience cognition over visual variety.",
+  "author": {
+    "name": "gonsoomoon-ml"
+  },
+  "homepage": "https://github.com/gonsoomoon-ml/claude-extensions",
+  "license": "MIT"
+}

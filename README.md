@@ -64,6 +64,14 @@ mkdir -p ~/.claude/skills/my-skill
 |------|------|
 | [aws-blog-table](skills/aws-blog-table/SKILL.md) | AWS 블로그용 스타일링된 HTML 테이블 생성 |
 
+## 플러그인 목록
+
+여러 스킬을 묶어서 함께 배포하는 플러그인입니다. `.claude-plugin/plugin.json` manifest 가 포함되어 있습니다.
+
+| 플러그인 | 포함된 스킬 | 설명 |
+|------|------|------|
+| [deck-design](plugins/deck-design/README.md) | deck-mindset · deck-agent-team | 슬라이드 데크 디자인 규칙 (5색 vocabulary · 15pt floor · 3-tier 위계 · 5 named layouts) + Phase-2 검토용 critic agent team (visual / content / cognitive / compliance + synthesizer + gate) |
+
 ## 라이선스
 
 MIT
