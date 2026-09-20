@@ -1,10 +1,11 @@
 # deck-design plugin
 
-Two complementary skills for building slide decks that survive critic review:
+Three complementary skills for building slide decks that survive critic review:
 
 | Skill | Type | Purpose |
 |---|---|---|
 | **[deck-mindset](skills/deck-mindset/SKILL.md)** | Static rules | The vocabulary, hierarchy, and layouts. *What* a good slide is. |
+| **[deck-build](skills/deck-build/SKILL.md)** | Build tools | Style tokens, pptxgenjs patterns, QA loop. *How* to produce the file. |
 | **[deck-agent-team](skills/deck-agent-team/SKILL.md)** | Execution tools | Parallel critic agents + orchestrator. *How* to verify a deck against the rules. |
 
 You can use them **independently or together**. They share design intent but have no hard runtime dependency.
@@ -14,6 +15,8 @@ You can use them **independently or together**. They share design intent but hav
 | Scenario | Skill to use |
 |---|---|
 | Designing a new deck from scratch | **deck-mindset** (read SKILL.md, pick layouts, allocate colors) |
+| Producing the .pptx once content is locked | **deck-build** (tokens → build script → validate → render → look) |
+| A dark-background or Korean-language deck | **deck-build** (font stack, render artifacts, NFD filenames) |
 | Auditing rules manually (no automation) | **deck-mindset** (squint test, hierarchy check, color-cap audit) |
 | Reviewing a deck programmatically before ship | **deck-agent-team** (run `orchestrator.py`, dispatch critics, gate check) |
 | Inheriting an undocumented deck | **both** (mindset to learn what to look for, agent-team to surface violations) |
