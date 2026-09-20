@@ -51,6 +51,17 @@ Rules that survive contact with real decks:
 - **15pt floor.** Anything smaller than BODY is a citation, not content.
 - **No chrome.** No header bars, no footer bars, no page numbers, no accent stripe under the title.
   A source line at the bottom (CITE, MUTED) is the only furniture.
+- **The CITE line is for citations, not claims.** Three kinds of small text get confused with each other,
+  and only one of them belongs at 10pt:
+
+| What it is | Where it goes | Size |
+|---|---|---|
+| A cue the audience must **read** — assumptions, scope, the condition a number depends on | Body area, as a sentence | **14pt or larger** |
+| Something the presenter must **say** — "I built this", how a product maps to another cloud | Speaker notes (`addNotes`) | — |
+| An actual **citation** — paper, blog, URL | Bottom line | 10pt |
+
+  A claim in 10pt gray is a claim nobody reads. If it is the strongest thing on the slide — that the
+  presenter built the system, that every number is an assumption — it is either spoken or it is 14pt.
 - **Product names are free.** They do not count toward a slide's text budget — but everything else does.
 - Both `scripts/style.js` (pptxgenjs) and the token list above encode the same vocabulary; keep them in sync
   with `../deck-mindset/color_vocabulary.md` if you re-calibrate for a different background.
