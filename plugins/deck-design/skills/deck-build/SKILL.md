@@ -66,6 +66,30 @@ Rules that survive contact with real decks:
 - Both `scripts/style.js` (pptxgenjs) and the token list above encode the same vocabulary; keep them in sync
   with `../deck-mindset/color_vocabulary.md` if you re-calibrate for a different background.
 
+## Table or cards
+
+Both hold the same content. They differ in **where the eye stops**: a table lets it run down a column
+("that whole column is zero"), a card makes it stop inside one container ("zero became forty").
+
+| Use | When |
+|---|---|
+| **Table** | 5+ rows · 3+ columns · the message lives in a **column** ("all three were rejected") · the list of criteria *is* the point |
+| **Cards** | 4 or fewer items · one number per item worth remembering · the presenter walks through them one at a time · items are independent, not a comparison |
+| **Neither** | 7+ items — split the slide or cut |
+
+The deciding question is not which looks better. It is **what the audience should carry out of the room**:
+a *pattern* (table) or a *number* (cards).
+
+Two traps:
+
+- **A before/after table makes two camps.** Column heads like "current / proposed" get read as "ours
+  versus the vendor's", and every number under the second head is discounted. Cards that hold
+  `0 → 40` inside one container do not create sides. If you keep the table, name the columns by the
+  **mechanism** that causes the difference, not by whose idea it is.
+- **Cards on consecutive slides go flat.** If the previous slide is a card grid, the next one needs a
+  different shape — a table, a timeline, a hero number — even when cards would work. Check the neighbours
+  before choosing, and check that a timeline does not repeat the implementation-plan slide you already have.
+
 ## Building with pptxgenjs
 
 These are the mistakes that cost a rebuild, not the API basics:
