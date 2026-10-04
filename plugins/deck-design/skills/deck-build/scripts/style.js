@@ -71,7 +71,7 @@ const textBase = (over = {}) => ({
 });
 
 /** Slide title — top-left, one line. Keep it a claim, not a topic. */
-function title(s, text, { y = 0.3 } = {}) {
+function title(s, text, { y = 0.15 } = {}) {
   s.addText(text, textBase({
     x: T.MARGIN, y, w: T.W - T.MARGIN * 2, h: 0.6,
     fontSize: T.TITLE, bold: true, color: T.TEXT,

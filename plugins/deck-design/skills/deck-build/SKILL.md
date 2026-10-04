@@ -51,7 +51,7 @@ Rules that survive contact with real decks:
 
 - **One focal color per slide.** If two things are magenta, neither is the subject.
 - **15pt floor.** Anything smaller than BODY is a citation, not content.
-- **Title near the top.** `title()` puts it at y = 0.3in. On a template, move the title placeholder up instead of
+- **Title near the top.** `title()` puts it at y = 0.15in. On a template, move the title placeholder up instead of
   inheriting a low position, and keep it identical on every content slide (`../deck-mindset/lessons.md`).
 - **No chrome.** No header bars, no footer bars, no page numbers, no accent stripe under the title.
   A source line at the bottom (CITE, MUTED) is the only furniture.
