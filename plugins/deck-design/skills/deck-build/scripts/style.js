@@ -13,7 +13,11 @@
 /* ── tokens ──────────────────────────────────────────────────────────── */
 
 const T = {
-  FONT: "Noto Sans CJK KR", // Korean-safe; renders identically in LibreOffice QA
+  // Latin in the brand face, Korean in Noto Sans CJK KR. pptxgenjs writes ONE face into latin/ea/cs,
+  // so run scripts/set_ea_font.py after writeFile() to put KR into ea/cs.
+  // RENDER_CHECK=1 → Latin also Noto, because Amazon Ember is not installed on Linux QA machines.
+  LATIN: process.env.RENDER_CHECK === "1" ? "Noto Sans CJK KR" : "Amazon Ember",
+  KR: "Noto Sans CJK KR",
   BG: "060B1A", // deep navy surface
   TEXT: "EAF0FF", // primary text
   ACCENT: "FF40FF", // the one focal color per slide
@@ -25,10 +29,14 @@ const T = {
   MID: 18,
   BODY: 15,
   CITE: 10,
+  TAKEAWAY: 24, // the one-line takeaway — replaces MID on that slide (still max 3 sizes)
+  HEADLINE: 40, // cover / statement headline
   W: 13.333, // canvas width  (LAYOUT_WIDE)
   H: 7.5, // canvas height
   MARGIN: 0.8, // left margin used by every text block
 };
+
+T.FONT = T.LATIN; // deprecated alias — older build scripts used T.FONT
 
 /** Background image path — set once by the build script if a gradient PNG is used. */
 let BG_IMAGE = null;
@@ -57,7 +65,7 @@ function slide(pres) {
 const textBase = (over = {}) => ({
   isTextBox: true,
   margin: 0,
-  fontFace: T.FONT,
+  fontFace: T.LATIN,
   valign: "middle",
   ...over,
 });
@@ -82,7 +90,7 @@ function eyebrow(s, text, { y = 1.0, color = T.ACCENT, size = T.BODY } = {}) {
 function takeaway(s, text, { y = 6.1, color = T.TEXT } = {}) {
   s.addText(text, textBase({
     x: T.MARGIN, y, w: T.W - T.MARGIN * 2, h: 0.6,
-    fontSize: 24, bold: true, color,
+    fontSize: T.TAKEAWAY, bold: true, color,
   }));
 }
 
@@ -146,8 +154,8 @@ function table(s, rows, { x = T.MARGIN, y, w = T.W - T.MARGIN * 2, colW, rowH = 
     r.map((cell, ci) => ({
       text: String(cell),
       options: {
-        fontFace: T.FONT,
-        fontSize: ri === 0 ? T.BODY : 16,
+        fontFace: T.LATIN,
+        fontSize: T.BODY, // header and body share BODY; the header differs by ACCENT + bold
         bold: ri === 0 || (firstColBold && ci === 0),
         color: ri === 0 ? T.ACCENT : T.TEXT,
         valign: "middle",

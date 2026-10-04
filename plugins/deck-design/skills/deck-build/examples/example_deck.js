@@ -5,7 +5,9 @@
  *   npm install pptxgenjs                       # only if require() fails
  *   python ../scripts/gradient_bg.py assets/bg.png
  *   node example_deck.js                        # → out/example.pptx
+ *   python ../scripts/set_ea_font.py out/example.pptx   # Korean face into ea/cs
  *   python ../scripts/qa.py out/example.pptx
+ *   (QA render: RENDER_CHECK=1 node example_deck.js — Latin also Noto)
  */
 const path = require("path");
 const pptxgen = require("pptxgenjs");
@@ -24,15 +26,15 @@ const { T } = S;
   S.eyebrow(s, "Section label — what this deck is about", { y: 1.05, size: T.MID });
   s.addText("The claim the deck argues", {
     isTextBox: true, margin: 0, x: T.MARGIN, y: 1.55, w: 11.7, h: 0.75,
-    fontFace: T.FONT, fontSize: 40, bold: true, color: T.TEXT,
+    fontFace: T.LATIN, fontSize: T.HEADLINE, bold: true, color: T.TEXT,
   });
-  S.eyebrow(s, "The one sentence a listener repeats afterwards", { y: 2.45, color: T.MUTED, size: 24 });
+  S.eyebrow(s, "The one sentence a listener repeats afterwards", { y: 2.45, color: T.MUTED, size: T.TAKEAWAY });
   S.eyebrow(s, "2026-09-30", { y: 4.5, color: T.MUTED, size: T.MID });
   s.addText("Presenter Name", {
     isTextBox: true, margin: 0, x: T.MARGIN, y: 4.95, w: 6, h: 0.4,
-    fontFace: T.FONT, fontSize: T.MID, bold: true, color: T.TEXT,
+    fontFace: T.LATIN, fontSize: T.MID, bold: true, color: T.TEXT,
   });
-  S.eyebrow(s, "name@example.com", { y: 5.4, color: T.MUTED });
+  S.eyebrow(s, "name@example.com", { y: 5.4, color: T.MUTED, size: T.MID }); // cover keeps 3 sizes: 40 / 24 / 18
   s.addNotes("Cover: say the claim, then the takeaway line. Do not read the deck title.");
 }
 
@@ -71,7 +73,7 @@ const { T } = S;
   S.eyebrow(s, "On premises", { y: 1.0, color: T.MUTED });
   s.addText("Cloud", {
     isTextBox: true, margin: 0, x: WALL + 0.5, y: 1.0, w: 3, h: 0.35,
-    fontFace: T.FONT, fontSize: T.BODY, color: T.MUTED,
+    fontFace: T.LATIN, fontSize: T.BODY, color: T.MUTED,
   });
 
   const rows = [
@@ -84,18 +86,18 @@ const { T } = S;
     const y = 1.75 + i * 1.4;
     s.addText(`${r.n}  ${r.label}`, {
       isTextBox: true, margin: 0, x: T.MARGIN, y: y + 0.08, w: 2.8, h: 0.4,
-      fontFace: T.FONT, fontSize: 16, bold: true, color: T.TEXT,
+      fontFace: T.LATIN, fontSize: T.BODY, bold: true, color: T.TEXT,
     });
     const x0 = 3.6;
     S.arrow(pres, s, { x: x0, y: y + 0.28, w: r.box.x - x0 - 0.05, color: i === 0 ? T.SECOND : T.ACCENT });
-    S.card(pres, s, { x: r.box.x, y: y - 0.05, w: r.box.w, h: 0.72 });
+    S.card(pres, s, { x: r.box.x, y: y - 0.05, w: r.box.w, h: 0.82 });
     s.addText(r.model, {
       isTextBox: true, margin: 0, x: r.box.x + 0.18, y: y - 0.02, w: r.box.w - 0.3, h: 0.35,
-      fontFace: T.FONT, fontSize: 14, bold: true, color: T.TEXT,
+      fontFace: T.LATIN, fontSize: T.BODY, bold: true, color: T.TEXT,
     });
     s.addText(r.note, {
-      isTextBox: true, margin: 0, x: r.box.x + 0.18, y: y + 0.3, w: r.box.w - 0.3, h: 0.32,
-      fontFace: T.FONT, fontSize: 11, color: T.MUTED,
+      isTextBox: true, margin: 0, x: r.box.x + 0.18, y: y + 0.36, w: r.box.w - 0.3, h: 0.34,
+      fontFace: T.LATIN, fontSize: T.BODY, color: T.MUTED,
     });
   });
 

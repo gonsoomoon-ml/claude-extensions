@@ -1,6 +1,6 @@
 ---
 name: deck-mindset
-description: Build slide decks that survive critic review — 5-color vocabulary on dark backgrounds, 15pt floor typography, 3-tier hierarchy (Size · Weight · Color semantic), N-card equal-width grid, and named layout patterns. Use when designing or building any presentation that emphasizes consistency and audience cognition over visual variety.
+description: Build slide decks that survive critic review — 5-color vocabulary on dark backgrounds, 15pt floor typography, 3-tier hierarchy (Size · Weight · Color semantic), N-card equal-width grid, and named layout patterns, plus template profiles (AWS black). Use when designing or building any presentation that emphasizes consistency and audience cognition over visual variety; pair with deck-build to produce the .pptx.
 ---
 
 # Deck Mindset
@@ -15,6 +15,8 @@ Every color carries a fixed semantic role. Reusing the same color for the same m
 
 See [color_vocabulary.md](color_vocabulary.md) for the 5-color vocabulary on a dark navy background, contrast math (WCAG AA+), per-slide budget (3-4 colors), and forbidden hues.
 
+On a light template, keep the roles and recalibrate the hex values through a profile (text and accent ≥ 4.5:1 against the background).
+
 ### 2. Hierarchy is enforced by *role*, not by size alone
 
 Three tiers — **emphasis · intermediate · normal** — combine three orthogonal mechanisms:
@@ -22,6 +24,8 @@ Three tiers — **emphasis · intermediate · normal** — combine three orthogo
 - **Size** (1.4× ratio between tiers, 15pt floor)
 - **Weight** (bold/non-bold within same color and size)
 - **Color semantic** (ORANGE = focus, GREEN = positive, PINK = warning, WHITE = body, GRAY = caption-only)
+
+A profile may collapse ORANGE · GREEN · PINK into a single focal color (aurora-black uses magenta) — the rule "one focus per slide" stays.
 
 See [hierarchy_framework.md](hierarchy_framework.md) for the full 3-axis system, when to use which axis, and anti-patterns.
 
@@ -68,8 +72,8 @@ Beyond layouts, recurring card patterns:
 1. **Pick the layout** — match the slide's purpose to one of 5 named layouts
 2. **Allocate the budget** — choose 3-4 colors max from the 5-color vocabulary, assign each a semantic role
 3. **Set the hierarchy** — identify emphasis/intermediate/normal tier per text element
-4. **Build with constants** — define `NAVY`, `WHITE`, `ORANGE`, `GREEN`, `PINK`, `GRAY` as the only `RGBColor(...)` values; audit at PR time
-5. **Validate Phase 1** — programmatic check: 15pt floor, off-canvas, contrast (see myslide skill or similar validator)
+4. **Build with constants** — the profile's tokens are the only color and size values (aurora-black: `format_aurora.py`, deck-build: `scripts/style.js`); audit at PR time
+5. **Validate Phase 1** — programmatic check: 15pt floor, off-canvas, contrast, then render and look at every slide (see [deck-build](../deck-build/SKILL.md) `scripts/qa.py`, or the myslide validator)
 6. **Validate Phase 2** — agent team or human review for design-level violations (see [deck-agent-team](../deck-agent-team/SKILL.md))
 
 ## Anti-patterns to avoid
@@ -83,9 +87,27 @@ Beyond layouts, recurring card patterns:
 
 ## Example
 
-See [examples/M1_case_study.md](examples/M1_case_study.md) for how a 31-slide deck applied these rules across all 5 named layouts and 8 card families.
+See [examples/M1_case_study.md](examples/M1_case_study.md) for how a 31-slide deck applied these rules across all 5 named layouts and 8 card families, and [examples/aurora_case_study.md](examples/aurora_case_study.md) for a 53-slide deck on the AWS black template — the decisions that changed the skill and what was tried and dropped.
+
+
+## Profiles — a vocabulary calibrated for a concrete template
+
+The rules above are template-agnostic. A **profile** binds them to one template: base file, hex values, type scale, named layouts, chrome rules, plus the build helper that enforces them in code.
+
+| Profile | Base | Accent | Where |
+|---|---|---|---|
+| **aurora-black** (2026-09, 60-min session deck, 53 slides final) | AWS black deck master (13.33×7.5in, `1_Blank` layout gives background + logo + copyright) | magenta `#FF40FF`, body `#EAF0FF`, muted `#D6DCEA`, box border `#C9D1E3` | [profiles/aurora-black/PROFILE.md](profiles/aurora-black/PROFILE.md) · `format_aurora.py` (helpers) · `example_build.py` (5 layouts) · `example_build_v6.py` (8 v6 layouts + `finalize_notes`) · `make_base.py` (slim template from any AWS deck) |
+
+Headline lessons (full list, dated and with the evidence behind each: [lessons.md](lessons.md)):
+
+- **Let the template carry the chrome.** Build on its blank layout; code adds only the cite line — no bars, no logo, no page numbers.
+- **Three sizes per slide (30/18/15) + the 10pt cite.** Hierarchy comes from weight and the single accent color.
+- **Text budget.** Title ≤ 26 chars (hard limit 34), ≤ 180 chars per content slide, ≤ 120 with a figure; what leaves the slide goes into the notes or the spoken track.
+- **One decision per turn, as an ASCII mock.** Show it, wait for approval, then change the code — and keep a glossary of rejected → approved terms.
 
 ## Related
 
+- [deck-build](../deck-build/SKILL.md) — style tokens, build patterns and the validate → render → inspect QA loop
 - [deck-agent-team](../deck-agent-team/SKILL.md) — Phase-2 agent critics for design review
+- [lessons.md](lessons.md) — the full, dated lesson list behind the headline lessons above
 - `myslide` skill (oh-my-skills) — Phase-1 programmatic validator (qa_validate.py)

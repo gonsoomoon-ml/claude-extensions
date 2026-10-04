@@ -32,7 +32,8 @@ a re-render, and a re-read. A deck whose content is locked builds once.
 Write them at the top of the build script, use them everywhere, never inline a literal color again.
 
 ```js
-const KR      = "Noto Sans CJK KR";  // Korean-safe face, present in most Linux/QA images
+const LATIN   = "Amazon Ember";      // Latin text — the brand face (`latin` slot)
+const KR      = "Noto Sans CJK KR";  // Korean text (`ea` / `cs` slots); also Latin in QA renders (RENDER_CHECK=1)
 const BG      = "060B1A";            // deep navy — the dark surface deck-mindset assumes
 const TEXT    = "EAF0FF";            // primary text
 const ACCENT  = "FF40FF";            // the one focal color — subject of the slide
@@ -42,6 +43,7 @@ const LINE    = "C9D1E3";            // card / box borders
 const SURFACE = "141B30";            // card fill (glass, ~8% white over BG)
 
 const TITLE = 30, MID = 18, BODY = 15, CITE = 10;   // max 3 sizes per slide (+ the caption exception)
+const TAKEAWAY = 24, HEADLINE = 40;                 // takeaway line replaces MID on its slide; headline = cover / statement
 // canvas: 13.333 x 7.5 in (LAYOUT_WIDE)
 ```
 
@@ -112,8 +114,11 @@ and it is invisible in code review because the numbers look plausible.
 
 ## Korean decks — the specific gotchas
 
-- **Font:** `Noto Sans CJK KR`. Ships with most Linux images, so the QA render matches what the audience sees.
-  Latin-only faces (Calibri, Arial) fall back per-glyph and change line lengths.
+- **Font:** Latin in `Amazon Ember`, Korean in `Noto Sans CJK KR` — declare **both** on every run
+  (`latin` and `ea`/`cs`). pptxgenjs writes one face into all three slots, so run `scripts/set_ea_font.py`
+  after `writeFile()`; python-pptx sets `ea`/`cs` per run (the aurora-black profile's `format_aurora.py`).
+  Amazon Ember is not installed on Linux, so QA renders set Latin to Noto too (`RENDER_CHECK=1`); Latin widths
+  differ slightly from the brand face — leave ~10% slack in boxes with long Latin runs.
 - **QA render spacing:** LibreOffice inserts visible gaps in mixed Korean/Latin runs (`AI 를`, `6 개월째`).
   That is the renderer, not the file. Do not "fix" it by editing the text.
 - **Korean filenames break python-pptx.** macOS-normalized (NFD) names raise `PackageNotFoundError`
@@ -126,6 +131,7 @@ and it is invisible in code review because the numbers look plausible.
 
 ```bash
 node build_deck.js                                  # or python build_deck.py
+python scripts/set_ea_font.py out/deck.pptx         # pptxgenjs only: Korean face into ea/cs
 python scripts/qa.py out/deck.pptx                  # validate + render + list image paths
 ```
 
@@ -150,6 +156,7 @@ Re-render only the slides you changed, then stop. Two QA passes is normal; five 
 | `scripts/style.js` | Tokens + slide helpers (`slide`, `title`, `eyebrow`, `card`, `bullets`, `takeaway`, `source`, `table`) for pptxgenjs |
 | `scripts/gradient_bg.py` | Generates the dark gradient background PNG (Pillow) |
 | `scripts/qa.py` | Validate → PDF → per-slide JPEG, prints absolute paths to inspect |
+| `scripts/set_ea_font.py` | After a pptxgenjs build: puts the Korean face into the ea/cs slots of every run, Latin untouched |
 | `examples/example_deck.js` | Three slides — cover, comparison table, boundary diagram — using the helpers |
 | `reference/korean-deck-notes.md` | Long-form notes: font stack, render artifacts, NFD filenames, reusing an existing deck's theme |
 
@@ -159,6 +166,7 @@ Re-render only the slides you changed, then stop. Two QA passes is normal; five 
 npm install pptxgenjs                     # only if require('pptxgenjs') fails
 python scripts/gradient_bg.py assets/bg.png
 node examples/example_deck.js             # writes out/example.pptx
+python scripts/set_ea_font.py out/example.pptx
 python scripts/qa.py out/example.pptx
 ```
 
@@ -169,6 +177,7 @@ Then copy `examples/example_deck.js`, replace the content, and keep the helpers.
 - [ ] Content was approved before the first build
 - [ ] Every color and size comes from the token block
 - [ ] One focal color per slide; nothing below the 15pt floor except citations
+- [ ] Latin = Amazon Ember, Korean = Noto Sans CJK KR on every run (`set_ea_font.py` after pptxgenjs)
 - [ ] Validator passes with no findings
 - [ ] Every slide has been viewed as an image, not just built
 - [ ] Boundary-carrying shapes verified against the constant, not by eye

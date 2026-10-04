@@ -17,6 +17,7 @@ You can use them **independently or together**. They share design intent but hav
 | Designing a new deck from scratch | **deck-mindset** (read SKILL.md, pick layouts, allocate colors) |
 | Producing the .pptx once content is locked | **deck-build** (tokens → build script → validate → render → look) |
 | A dark-background or Korean-language deck | **deck-build** (font stack, render artifacts, NFD filenames) |
+| Building on the AWS black template | **deck-mindset** `profiles/aurora-black/` (base template, tokens, named layout builders) + **deck-build** QA loop |
 | Auditing rules manually (no automation) | **deck-mindset** (squint test, hierarchy check, color-cap audit) |
 | Reviewing a deck programmatically before ship | **deck-agent-team** (run `orchestrator.py`, dispatch critics, gate check) |
 | Inheriting an undocumented deck | **both** (mindset to learn what to look for, agent-team to surface violations) |
@@ -25,6 +26,8 @@ You can use them **independently or together**. They share design intent but hav
 ## Origin
 
 Born from a 31-slide module (M1 — AI Developer Reinforcement) that shipped after a 3-iter critic-driven cycle. The principles that **survived all 3 iterations** were extracted into deck-mindset; the **infrastructure** that drove the cycle was extracted into deck-agent-team.
+
+A second deck — 53 slides on the AWS black template (2026-09) — added template profiles and the dated lessons in [skills/deck-mindset/lessons.md](skills/deck-mindset/lessons.md); see [skills/deck-mindset/examples/aurora_case_study.md](skills/deck-mindset/examples/aurora_case_study.md).
 
 The full case study lives in [skills/deck-mindset/examples/M1_case_study.md](skills/deck-mindset/examples/M1_case_study.md) — frequency data, what survived vs. didn't, and why.
 
@@ -80,17 +83,18 @@ python3 skills/deck-agent-team/orchestrator.py --apply reports/<timestamp>/repor
 3. Run **skills/deck-agent-team/orchestrator.py** to surface violations.
 4. The critics in deck-agent-team are *grounded against* the rules in deck-mindset — they enforce the same vocabulary that deck-mindset documents.
 
-## Why two skills inside one plugin?
+## Why three skills inside one plugin?
 
 Three modes of use, but they share a strong cross-reference graph:
 
 | Mode | Skills used |
 |---|---|
 | Rules-only (no Python, no automation) | deck-mindset alone |
+| Build-only (produce the .pptx from locked content) | deck-build alone |
 | Tools-only (rules embedded in your own CLAUDE.md) | deck-agent-team alone |
-| Both (full mindset + automated review) | both, composed |
+| Full cycle (rules → build → automated review) | all three, composed |
 
-Bundling them as **one plugin with two skills** keeps install simple while still letting users invoke either skill independently. The cross-reference link graph (critics → vocabulary, layouts → critics) stays unbroken because both skills ship together.
+Bundling them as **one plugin with three skills** keeps install simple while still letting users invoke either skill independently. The cross-reference link graph (critics → vocabulary, layouts → critics) stays unbroken because both skills ship together.
 
 If you only want one of them, you can copy a single `skills/<name>/` subtree into your own setup — each skill is self-contained inside its own folder.
 
@@ -107,8 +111,30 @@ plugins/deck-design/
     │   ├── color_vocabulary.md           ← 5-color system on dark backgrounds
     │   ├── hierarchy_framework.md        ← 3-tier × 3-axis system
     │   ├── layout_naming.md              ← 5 named layouts + 8 card families
-    │   └── examples/
-    │       └── M1_case_study.md          ← evidence: what worked across 31 slides
+    │   ├── lessons.md                    ← dated lessons from rendered slides and presenter reviews
+    │   ├── examples/
+    │   │   ├── M1_case_study.md          ← evidence: what worked across 31 slides
+    │   │   └── aurora_case_study.md      ← evidence: 53 slides on the AWS black template, tried and dropped
+    │   └── profiles/
+    │       └── aurora-black/             ← profile: AWS black master (13.333 × 7.5 in)
+    │           ├── PROFILE.md            ← tokens, type scale, named layouts, chrome and cite rules
+    │           ├── format_aurora.py      ← tokens + text/shape helpers (python-pptx)
+    │           ├── layouts_aurora.py     ← named layout builders
+    │           ├── example_build.py      ← five layouts
+    │           ├── example_build_v6.py   ← the eight v6 layouts + finalize_notes()
+    │           └── make_base.py          ← slim base template from an AWS deck (never commit the result)
+    │
+    ├── deck-build/                       ← build tools
+    │   ├── SKILL.md                      ← pipeline, tokens, table-or-cards, Korean gotchas, QA loop
+    │   ├── scripts/
+    │   │   ├── style.js                  ← tokens + slide helpers (pptxgenjs)
+    │   │   ├── qa.py                     ← validate → PDF → per-slide JPEG
+    │   │   ├── set_ea_font.py            ← Korean face into ea/cs after a pptxgenjs build
+    │   │   └── gradient_bg.py            ← dark gradient background PNG
+    │   ├── examples/
+    │   │   └── example_deck.js           ← cover · comparison table · boundary diagram
+    │   └── reference/
+    │       └── korean-deck-notes.md      ← font stack, render artifacts, NFD filenames
     │
     └── deck-agent-team/                  ← execution tools (Tier-2)
         ├── SKILL.md                      ← skill entry; architecture + workflow
@@ -132,6 +158,12 @@ plugins/deck-design/
 ### deck-mindset
 
 None. Pure markdown — read and apply.
+
+### deck-build
+
+- Node.js + `pptxgenjs` (JS path) **or** Python 3.10+ + `python-pptx` (Python path, e.g. the aurora-black profile)
+- `libreoffice` headless + `poppler-utils` (`pdftoppm`) for `scripts/qa.py`
+- Fonts for faithful QA renders: `Noto Sans CJK KR` (Latin is rendered in Noto too with `RENDER_CHECK=1`)
 
 ### deck-agent-team
 
@@ -164,7 +196,7 @@ The **architecture** (orchestrator → handoff → critics → synthesizer → g
 
 ## Versioning
 
-These skills are extracted from a shipped deck (M1, 2026-05-23). Treat the rules as *empirically validated on one deck*. The extract-after-ship discipline means everything in deck-mindset has at least one production-deck precedent. As more decks accumulate, the patterns either reinforce or get refined.
+These skills are extracted from shipped decks — M1 (2026-05-23) and the aurora-black session deck (2026-09-08). Treat the rules as *empirically validated on two decks*. The extract-after-ship discipline means everything in deck-mindset has at least one production-deck precedent. As more decks accumulate, the patterns either reinforce or get refined.
 
 If your usage discovers a pattern these skills don't cover, follow [skills/deck-mindset/layout_naming.md → "Building a new named layout"](skills/deck-mindset/layout_naming.md) or open an issue with concrete slide examples.
 

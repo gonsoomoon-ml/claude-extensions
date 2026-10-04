@@ -70,7 +70,7 @@ mkdir -p ~/.claude/skills/my-skill
 
 | 플러그인 | 포함된 스킬 | 설명 |
 |------|------|------|
-| [deck-design](plugins/deck-design/README.md) | deck-mindset · deck-agent-team | 슬라이드 데크 디자인 규칙 (5색 vocabulary · 15pt floor · 3-tier 위계 · 5 named layouts) + Phase-2 검토용 critic agent team (visual / content / cognitive / compliance + synthesizer + gate) |
+| [deck-design](plugins/deck-design/README.md) | deck-mindset · deck-build · deck-agent-team | 슬라이드 데크 디자인 규칙 (5색 vocabulary · 15pt floor · 3-tier 위계 · 5 named layouts · 템플릿 프로필 aurora-black) + 빌드 도구 (토큰 · pptxgenjs/python-pptx 패턴 · 검증 → 렌더 → 확인 QA, 라틴 Amazon Ember + 한글 Noto) + Phase-2 검토용 critic agent team (visual / content / cognitive / compliance + synthesizer + gate) |
 
 ## 라이선스
 

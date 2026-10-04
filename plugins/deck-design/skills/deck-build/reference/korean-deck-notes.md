@@ -6,12 +6,23 @@ Notes that only show up when the deck is Korean, the background is dark, and QA 
 
 | Use | Face | Why |
 |---|---|---|
-| Everything | `Noto Sans CJK KR` | Ships with most Linux images, so the QA render matches the presenter's screen closely |
-| Avoid | Latin-only faces (Calibri, Arial, Aptos) | Korean glyphs fall back per-glyph; line lengths change between QA and PowerPoint |
+| Latin text | `Amazon Ember` | The AWS brand face — the `latin` slot of every run |
+| Korean text | `Noto Sans CJK KR` | Korean-safe, ships with most Linux images — the `ea` and `cs` slots of every run |
+| QA renders | `Noto Sans CJK KR` for Latin too (`RENDER_CHECK=1`) | Amazon Ember is not installed on Linux; LibreOffice would substitute a face with other widths |
+| Avoid | Calibri, Arial, Aptos as the body face | Latin-only and off-brand; Korean glyphs fall back per character |
 | Avoid | `Malgun Gothic` | Windows-only — LibreOffice substitutes, and the substitute has different widths |
 
-Declare the face explicitly on **every** text run. A missing `fontFace` inherits the theme font, which is
-usually Latin-only, and the slide silently renders in a substituted face.
+Declare **both** faces on **every** text run. A missing face inherits the theme font, which is usually
+Latin-only, and the slide silently renders in a substituted face.
+
+- **python-pptx** — set the Latin face on `run.font.name` and write `<a:ea>`/`<a:cs>` with the Korean face
+  into the run properties (the aurora-black profile's `format_aurora.py`, `_set_fonts`, does exactly this).
+- **pptxgenjs** — `fontFace` is written into `latin`, `ea` and `cs` alike (checked in pptxgenjs 4.0.1), so a
+  build with `fontFace: "Amazon Ember"` asks for Korean glyphs Amazon Ember does not have. Run
+  `python scripts/set_ea_font.py deck.pptx` after `writeFile()` — it rewrites only `ea`/`cs`.
+
+Latin widths in a Noto QA render differ slightly from Amazon Ember in PowerPoint — leave ~10% slack in boxes
+whose text is mostly Latin.
 
 ## Rendering artifacts that are not defects
 
