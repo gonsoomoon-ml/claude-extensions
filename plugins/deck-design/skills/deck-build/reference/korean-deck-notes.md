@@ -72,8 +72,10 @@ A deck's tone lives in four numbers — left margin, title size, body size, and 
 
 ## Line breaks in Korean headlines
 
-Korean wraps mid-word, so a headline that must break in a specific place should be two runs with an
-explicit break, or two text boxes. Relying on the wrap point means the break moves when the font substitutes.
+In LibreOffice QA renders Korean wraps at spaces (between words), not mid-word — measured 2026-10-04 on four
+card texts whose rendered line counts matched a word-by-word estimate; PowerPoint was not measured. Either way,
+a headline that must break in a specific place should be two runs with an explicit break, or two text boxes.
+Relying on the wrap point means the break moves when the font substitutes.
 
 ## Text budget
 

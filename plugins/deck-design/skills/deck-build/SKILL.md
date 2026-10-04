@@ -51,6 +51,8 @@ Rules that survive contact with real decks:
 
 - **One focal color per slide.** If two things are magenta, neither is the subject.
 - **15pt floor.** Anything smaller than BODY is a citation, not content.
+- **Title near the top.** `title()` puts it at y = 0.3in. On a template, move the title placeholder up instead of
+  inheriting a low position, and keep it identical on every content slide (`../deck-mindset/lessons.md`).
 - **No chrome.** No header bars, no footer bars, no page numbers, no accent stripe under the title.
   A source line at the bottom (CITE, MUTED) is the only furniture.
 - **The CITE line is for citations, not claims.** Three kinds of small text get confused with each other,
@@ -124,8 +126,9 @@ and it is invisible in code review because the numbers look plausible.
 - **Korean filenames break python-pptx.** macOS-normalized (NFD) names raise `PackageNotFoundError`
   even though the file exists. Copy it to an ASCII name first with a shell glob:
   `cp 260908-AWS-*.pptx ref.pptx` — then open `ref.pptx`.
-- **Line breaks:** Korean wraps mid-word. For a headline that must break in a specific place, use two
-  text runs or two text boxes rather than relying on the wrap point.
+- **Line breaks:** in LibreOffice QA renders Korean wraps at spaces (between words), not mid-word —
+  measured 2026-10-04; PowerPoint was not measured. Estimate line counts word by word. For a headline that
+  must break in a specific place, use two text runs or two text boxes rather than relying on the wrap point.
 
 ## QA loop
 

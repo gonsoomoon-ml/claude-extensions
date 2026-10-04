@@ -12,6 +12,7 @@ or a presenter review, not from theory. The deck itself is described in
 - **Let the template carry the chrome.** Keep master + layouts only (`make_base.py`), build on a blank layout. No background picture, no drawn logo, no page numbers — the user reads them as noise.
 - **Cite = title + https URL, one per line, full width, bottom-right, just above the template copyright.** A short-title cite in a narrow box wraps every URL.
 - **Title ≤ 34 chars on 13.33in at 30pt bold.** `add_title()` prints a warning; shorten the sentence, never the font.
+- **Title close to the top — about 0.3–0.5in — at the same spot on every content slide.** Template title placeholders often sit lower (the AWS LLM Day light template: 1.00in from the top) and leave an empty band above the title; the presenter asked to move it up on both decks (aurora `TITLE_TOP = 0.32in`; LLM Day deck 0.50in, 2026-10-04). Move the placeholder and shift the content by the same amount. In python-pptx set `left`, `top`, `width` and `height` together — writing only `top` on an inherited placeholder leaves `<a:off x="0">` with no size, and the title jumps to the left edge.
 - **3 sizes per slide (30/18/15) + 10pt cite exception.** Hierarchy comes from weight and the single accent color.
 - **Box padding is not optional** — 0.12in sides / 0.08in top-bottom, and shorten text that would wrap past the box height.
 - **Flow diagrams: number badges on arrows + a numbered list beside the diagram.** Labels on arrows collide the moment text is longer than a few words.
