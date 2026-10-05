@@ -65,6 +65,9 @@ Multi-category issues (`["visual", "content"]`) count once per metric — the sa
 
 #### Content match labels (canonical fidelity)
 
+If the handoff's `canonical_missing` is non-empty, list those slides next to the gate as **content not checked** —
+the content score does not cover them.
+
 | Score | State | Trigger | Drift type | Action |
 |---|---|---|---|---|
 | **5** | Verbatim | no content issues | none | Ship |

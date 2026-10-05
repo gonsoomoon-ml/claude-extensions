@@ -60,7 +60,8 @@ def render_previews(pptx_path: Path, preview_dir: Path,
     preview_dir.mkdir(parents=True, exist_ok=True)
     pdf_path = preview_dir / (pptx_path.stem + ".pdf")
     existing = sorted(preview_dir.glob("slide-*.png"))
-    if existing and not force:
+    # reuse only renders newer than the deck — a rebuilt deck is always re-rendered
+    if existing and not force and min(p.stat().st_mtime for p in existing) >= pptx_path.stat().st_mtime:
         return existing
 
     for old in preview_dir.glob("slide-*.png"):
@@ -84,14 +85,24 @@ def render_previews(pptx_path: Path, preview_dir: Path,
 # Stage 2 — extract slide text (for Critic B)
 # ---------------------------------------------------------------------------
 
+def _walk(shapes):
+    """Every shape, descending into groups — decks built for animation keep each reveal step in a group."""
+    from pptx.enum.shapes import MSO_SHAPE_TYPE
+    for shape in shapes:
+        if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+            yield from _walk(shape.shapes)
+        else:
+            yield shape
+
+
 def extract_text_per_slide(pptx_path: Path) -> dict[int, list[str]]:
-    """Use python-pptx to dump visible text per slide."""
+    """Use python-pptx to dump visible text per slide (group contents included)."""
     from pptx import Presentation
     prs = Presentation(str(pptx_path))
     out: dict[int, list[str]] = {}
     for i, slide in enumerate(prs.slides, 1):
         lines: list[str] = []
-        for shape in slide.shapes:
+        for shape in _walk(slide.shapes):
             if not shape.has_text_frame:
                 continue
             text = shape.text_frame.text.strip()
@@ -120,7 +131,7 @@ def extract_canonical_mockup(mockup_md: Path,
     from mockup_parser import parse_mockup  # noqa: E402
 
     raw = parse_mockup(mockup_md)
-    ordered_ids = sorted(raw.keys(), key=lambda x: float(x))
+    ordered_ids = sorted((k for k in raw if float(k).is_integer()), key=float)   # sub-sections (#3.5) ignored
     aligned: dict[int, list[str]] = {}
     for pptx_idx in range(1, pptx_slide_count + 1):
         if pptx_idx - 1 < len(ordered_ids):
@@ -158,7 +169,8 @@ def write_handoff(target_pptx: Path,
                   extracted_text: dict[int, list[str]],
                   canonical_text: dict[int, list[str]],
                   qa_output: str,
-                  out_dir: Path) -> Path:
+                  out_dir: Path,
+                  canonical_missing: list[int] | None = None) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     bundle = {
         "target_pptx": str(target_pptx),
@@ -169,6 +181,7 @@ def write_handoff(target_pptx: Path,
         "slide_count": len(png_paths),
         "extracted_text": {str(k): v for k, v in extracted_text.items()},
         "canonical_text": {str(k): v for k, v in canonical_text.items()},
+        "canonical_missing": canonical_missing or [],   # slides whose content is NOT checked
         "qa_phase1_output": qa_output,
         "prompts": {
             "visual": str(prompts_dir / "critic_visual.md"),
@@ -343,7 +356,7 @@ def main() -> int:
                     help="dir for rendered PNGs (default: /tmp/<stem>_preview)")
     ap.add_argument("--qa-validator", type=Path,
                     default=_env_path("DECK_AGENT_QA_VALIDATOR"),
-                    help="optional Phase-1 validator script (e.g., qa_validate.py)")
+                    help="optional Phase-1 validator script (e.g., deck-build/scripts/qa.py)")
     ap.add_argument("--claude-md", type=Path,
                     default=_env_path("DECK_AGENT_CLAUDE_MD"),
                     help="path to project-level CLAUDE.md (passed to Critic D)")
@@ -397,7 +410,7 @@ def main() -> int:
         ap.error("--build-script (or DECK_AGENT_BUILD_SCRIPT) is required for review mode")
 
     target = args.target.resolve()
-    preview_dir = args.preview_dir or Path(f"/tmp/{target.stem}_preview")
+    preview_dir = (args.preview_dir or Path(f"/tmp/{target.stem}_preview")).resolve()   # pdftoppm runs with cwd=preview_dir
 
     timestamp = dt.datetime.now().strftime("%Y-%m-%d_%H-%M")
     out_dir = args.reports_dir / timestamp
@@ -412,6 +425,15 @@ def main() -> int:
 
     print("→ extracting canonical mockup text")
     canonical = extract_canonical_mockup(args.mockup, args.extractors_dir, len(pngs))
+    missing = [i for i, lines in canonical.items() if not lines]
+    if missing and len(missing) == len(canonical):
+        # Never let an unparsed mockup pass silently — Critic B skips empty slides, so content would score 5.
+        print(f"mockup format not recognized: {args.mockup} — no slide text parsed, so content cannot be "
+              "checked. Expected `### #N` headers, each followed by a fenced block of the slide's text "
+              "(SKILL.md, 'Mockup md contract').", file=sys.stderr)
+        return 1
+    if missing:
+        print(f"  warning: no mockup text for slide(s) {missing} — content is NOT checked there")
 
     print("→ running Phase-1 QA")
     qa_out = run_qa_phase1(target, args.qa_validator)
@@ -419,7 +441,7 @@ def main() -> int:
     print("→ writing handoff bundle")
     bundle = write_handoff(target, args.mockup, args.build_script,
                            args.claude_md, args.prompts_dir,
-                           pngs, extracted, canonical, qa_out, out_dir)
+                           pngs, extracted, canonical, qa_out, out_dir, missing)
     readme = write_runner_readme(bundle, out_dir)
     print(f"\nNext: follow {readme}")
     return 0

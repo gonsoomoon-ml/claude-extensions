@@ -10,6 +10,8 @@ Visual hierarchy on a slide is **not just font size**. It's the combination of t
 | **Intermediate** | Card titles, key sub-lines, anchor labels | 22-28pt (bold or non-bold) | WHITE bold or accent (semantic) |
 | **Normal** | Body text, list items, captions | 17-22pt non-bold | WHITE non-bold (default) |
 
+Typical sizes are the M1 deck's; with the type scale: emphasis 40 / 30, intermediate 24 / 18, normal 15.
+
 **Hard floor: 15pt** for any visible text. No exceptions — smaller text fails projector readability and 3-row-back legibility.
 
 ## The 3 axes (mechanisms)
@@ -30,7 +32,7 @@ Within the same color and size, bold creates a sub-tier. Useful for:
 
 ### Axis 3 — Color semantic
 
-The most powerful axis on dark backgrounds. *Color change = meaning change.*
+The most powerful axis. *Color change = meaning change.*
 
 - ORANGE = active focus / the answer
 - GREEN = positive outcome / worked example
@@ -60,7 +62,7 @@ If two adjacent texts must differ in level, **raise the higher role**, never dro
 
 ## Composite hierarchy in practice
 
-A well-built emphasis slide combines all three axes:
+A well-built emphasis slide combines all three axes (M1 sizes — with the scale: 40 / 24 / 18 / 15, no underline, cite 10):
 
 ```
 54pt WHITE bold + ORANGE underline   ← title (size + color anchor)

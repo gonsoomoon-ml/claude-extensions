@@ -16,8 +16,9 @@ You can use them **independently or together**. They share design intent but hav
 |---|---|
 | Designing a new deck from scratch | **deck-mindset** (read SKILL.md, pick layouts, allocate colors) |
 | Producing the .pptx once content is locked | **deck-build** (tokens → build script → validate → render → look) |
-| A dark-background or Korean-language deck | **deck-build** (font stack, render artifacts, NFD filenames) |
+| A Korean-language deck | **deck-build** (font stack, render artifacts, NFD filenames) |
 | Building on the AWS black template | **deck-mindset** `profiles/aurora-black/` (base template, tokens, named layout builders) + **deck-build** QA loop |
+| Building on a plain white background | **deck-mindset** `profiles/light/` (no template file; role table, helpers, build check) + **deck-build** QA loop |
 | Auditing rules manually (no automation) | **deck-mindset** (squint test, hierarchy check, color-cap audit) |
 | Reviewing a deck programmatically before ship | **deck-agent-team** (run `orchestrator.py`, dispatch critics, gate check) |
 | Inheriting an undocumented deck | **both** (mindset to learn what to look for, agent-team to surface violations) |
@@ -44,7 +45,7 @@ cat SKILL.md
 # 2. Pick a layout from the 5 named layouts
 cat layout_naming.md
 
-# 3. Allocate the 3-4 colors per slide from the 5-color vocabulary
+# 3. Allocate the 3-4 colors per slide from the profile's palette
 cat color_vocabulary.md
 
 # 4. Apply the 3-tier × 3-axis hierarchy
@@ -60,7 +61,7 @@ cat examples/M1_case_study.md
 # 1. Set env vars (or pass via CLI flags)
 export DECK_AGENT_BUILD_SCRIPT=/abs/path/to/build_deck.py
 export DECK_AGENT_MOCKUP_MD=/abs/path/to/mockup.md
-export DECK_AGENT_QA_VALIDATOR=/abs/path/to/qa_validate.py    # optional
+export DECK_AGENT_QA_VALIDATOR=/abs/path/to/deck-build/scripts/qa.py    # optional
 
 # 2. Render PNGs + extract canonical text + write handoff bundle
 python3 skills/deck-agent-team/orchestrator.py --target /abs/path/to/deck.pptx
@@ -108,7 +109,7 @@ plugins/deck-design/
 └── skills/
     ├── deck-mindset/                     ← static rules (Tier-1)
     │   ├── SKILL.md                      ← skill entry; describes when to use
-    │   ├── color_vocabulary.md           ← 5-color system on dark backgrounds
+    │   ├── color_vocabulary.md           ← fixed color roles, a palette per background
     │   ├── hierarchy_framework.md        ← 3-tier × 3-axis system
     │   ├── layout_naming.md              ← 5 named layouts + 8 card families
     │   ├── lessons.md                    ← dated lessons from rendered slides and presenter reviews
@@ -116,13 +117,17 @@ plugins/deck-design/
     │   │   ├── M1_case_study.md          ← evidence: what worked across 31 slides
     │   │   └── aurora_case_study.md      ← evidence: 53 slides on the AWS black template, tried and dropped
     │   └── profiles/
-    │       └── aurora-black/             ← profile: AWS black master (13.333 × 7.5 in)
-    │           ├── PROFILE.md            ← tokens, type scale, named layouts, chrome and cite rules
-    │           ├── format_aurora.py      ← tokens + text/shape helpers (python-pptx)
-    │           ├── layouts_aurora.py     ← named layout builders
-    │           ├── example_build.py      ← five layouts
-    │           ├── example_build_v6.py   ← the eight v6 layouts + finalize_notes()
-    │           └── make_base.py          ← slim base template from an AWS deck (never commit the result)
+    │       ├── aurora-black/             ← profile: AWS black master (13.333 × 7.5 in)
+    │       │   ├── PROFILE.md            ← tokens, type scale, named layouts, chrome and cite rules
+    │       │   ├── format_aurora.py      ← tokens + text/shape helpers (python-pptx)
+    │       │   ├── layouts_aurora.py     ← named layout builders
+    │       │   ├── example_build.py      ← five layouts
+    │       │   ├── example_build_v6.py   ← the eight v6 layouts + finalize_notes()
+    │       │   └── make_base.py          ← slim base template from an AWS deck (never commit the result)
+    │       └── light/                    ← profile: plain white background, no template file
+    │           ├── PROFILE.md            ← colors, role table, shapes, animation-ready build, checks
+    │           ├── format_light.py       ← tokens + helpers + check_slides() (python-pptx)
+    │           └── example_build.py      ← three slides
     │
     ├── deck-build/                       ← build tools
     │   ├── SKILL.md                      ← pipeline, tokens, table-or-cards, Korean gotchas, QA loop
@@ -172,15 +177,16 @@ None. Pure markdown — read and apply.
 - `libreoffice` headless (for PDF rendering)
 - `poppler-utils` (`pdftoppm`) (for PDF → PNG)
 - A parent Claude Code session (to dispatch the critic agents — orchestrator does *not* call LLMs itself)
-- (Optional) A Phase-1 programmatic validator (e.g., `qa_validate.py` from the `myslide` skill family in `oh-my-skills`)
+- (Optional) A Phase-1 validator script for `--qa-validator` — e.g., deck-build `scripts/qa.py`
 
-## Adapting to non-AWS-NAVY backgrounds
+## Adapting to other backgrounds
 
-The 5-color vocabulary in deck-mindset is calibrated for NAVY `#232F3E`. If your background differs:
+The color roles are background-independent; the hex values are not. Palettes exist for dark NAVY `#232F3E`, the dark
+aurora-black gradient and plain white (`profiles/light`). For any other background:
 
 1. Read [skills/deck-mindset/color_vocabulary.md → "Adaptation to other backgrounds"](skills/deck-mindset/color_vocabulary.md)
 2. Recalculate hex values for ≥4.5:1 contrast against your background
-3. Keep the *semantic* role binding (ORANGE = active focus, etc.) even if hex changes
+3. Keep the *semantic* role binding (the accent = active focus, etc.) even if hex changes
 
 The hierarchy framework, layout names, and card families are background-agnostic.
 
@@ -196,7 +202,7 @@ The **architecture** (orchestrator → handoff → critics → synthesizer → g
 
 ## Versioning
 
-These skills are extracted from shipped decks — M1 (2026-05-23) and the aurora-black session deck (2026-09-08). Treat the rules as *empirically validated on two decks*. The extract-after-ship discipline means everything in deck-mindset has at least one production-deck precedent. As more decks accumulate, the patterns either reinforce or get refined.
+These skills are extracted from shipped decks — M1 (2026-05-23), the aurora-black session deck (2026-09-08) and a 12-slide build-up deck on a light template (2026-10). Treat the rules as *empirically validated on three decks*. The extract-after-ship discipline means everything in deck-mindset has at least one production-deck precedent. As more decks accumulate, the patterns either reinforce or get refined.
 
 If your usage discovers a pattern these skills don't cover, follow [skills/deck-mindset/layout_naming.md → "Building a new named layout"](skills/deck-mindset/layout_naming.md) or open an issue with concrete slide examples.
 
@@ -206,5 +212,4 @@ MIT (inherits from the parent claude-extensions repo).
 
 ## Related
 
-- [oh-my-skills](https://github.com/) — `myslide` skill (Phase-1 programmatic validator)
 - Anthropic Claude Code documentation on skills and the `Skill` tool

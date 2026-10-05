@@ -9,7 +9,7 @@ Design choices:
 - Slide split on `### #N` headers (N may be int or "N.5" or "N ★").
 - Body = content inside the first fenced code block following each header.
 - Speaker notes & everything outside the fenced block is excluded.
-- Box-drawing glyphs are stripped, letter-spaced text is normalized.
+- Box-drawing glyphs (the whole Unicode box block) are stripped, letter-spaced text is normalized.
 """
 from __future__ import annotations
 
@@ -22,9 +22,8 @@ from pathlib import Path
 SLIDE_HEADER_RE = re.compile(r"^###\s+#(?P<id>[\d.]+)\s*(?P<rest>.*)$")
 FENCE_RE = re.compile(r"^```")
 
-# Single Unicode box-drawing block + a few decorative variants.
-BOX_GLYPHS = "║╔╗╚╝═─━│┌┐└┘├┤┬┴┼"
-BOX_GLYPH_RE = re.compile(f"[{re.escape(BOX_GLYPHS)}]")
+# The whole Unicode box-drawing block (U+2500–U+257F): light, heavy, dashed, double and rounded lines.
+BOX_GLYPH_RE = re.compile(r"[\u2500-\u257F]")
 
 
 def _strip_box(line: str) -> str:
@@ -33,9 +32,10 @@ def _strip_box(line: str) -> str:
 
 
 def _normalize_letter_spacing(text: str) -> str:
-    """Mockup writes emphasized words as ``A I 코 딩`` — single-char tokens
-    separated by single spaces. Merge any run of ≥2 consecutive single-char
-    tokens into one word; leave multi-char tokens alone.
+    """Mockup writes emphasized Latin words as ``A I`` — single-char tokens
+    separated by single spaces. Merge any run of ≥2 consecutive single Latin
+    letters/digits into one word; leave everything else alone. Korean is never
+    merged: one-syllable words (``한 명 더``, ``늘 뿐``) are ordinary text.
 
     Multi-space gaps (mockup's word boundary) collapse to single spaces.
     """
@@ -58,7 +58,7 @@ def _normalize_letter_spacing(text: str) -> str:
             _flush()
             out.append("")
             continue
-        if len(tok) == 1:
+        if len(tok) == 1 and tok.isascii() and tok.isalnum():
             buf.append(tok)
         else:
             _flush()

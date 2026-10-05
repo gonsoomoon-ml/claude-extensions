@@ -14,7 +14,7 @@ Look at each PNG and check:
 1. **Alignment** — do edges of related shapes line up on a consistent grid? Is text-frame baseline aligned with adjacent shapes?
 2. **Whitespace** — is left/right/top/bottom margin consistent across slides? Is any text crowded into a corner or floating in dead center with no anchor?
 3. **Shape collisions** — overlapping shapes, text overflowing its container, captions that wrap unintentionally, shapes touching slide edge.
-4. **Perceived contrast** — even if a color passes WCAG numerically, does it *feel* readable on the NAVY background? Watch especially for GRAY on small text.
+4. **Perceived contrast** — even if a color passes WCAG numerically, does it *feel* readable on the deck's background? Watch especially for GRAY on small text.
 5. **Font fallback artifacts** — Korean glyphs missing, mixed metric (Latin + CJK on same line with mismatched height), italic emulation looking awkward.
 6. **Visual consistency across slides** — same role (title, caption) should look the same size/weight/color across slides. Flag drift.
 

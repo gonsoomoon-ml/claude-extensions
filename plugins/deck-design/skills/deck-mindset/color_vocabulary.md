@@ -1,10 +1,11 @@
-# Color Vocabulary — 5-Color System on Dark Backgrounds
+# Color Vocabulary — fixed roles, a palette per background
 
 **Deck-wide cap: 5 colors. Slide-level recommendation: 3-4 colors.** GRAY is a tint of WHITE and does **not** count toward the cap.
 
-Every color is selected for **contrast against the background** (WCAG AA+ on dark surface) and assigned a **fixed semantic role**.
+Every color is selected for **contrast against the background** (WCAG AA: ≥ 4.5:1 for text) and assigned a **fixed semantic role**.
+The roles are background-independent; the hex values are not — a palette belongs to one background, dark or light.
 
-## The Vocabulary (calibrated for NAVY `#232F3E`)
+## Dark palette — NAVY `#232F3E` (the M1 deck)
 
 | Role | Name | Hex | Contrast vs background | Semantic — when to use |
 |---|---|---|---|---|
@@ -14,6 +15,16 @@ Every color is selected for **contrast against the background** (WCAG AA+ on dar
 | Positive | **GREEN** | `#38EF7D` | 12.4 : 1 | Successful outcome. Worked example. Goal achieved. |
 | Warning | **PINK** | `#F46DBA` | 6.6 : 1 | Anti-pattern. Risk. Gap. Warning callout. |
 | De-emphasis (tint) | **GRAY** | `#B5BEC8` | 6.5 : 1 | **Caption only** — bibliographic line, source label, de-emphasized callback. Tint of WHITE — not counted. |
+
+## Other palettes
+
+| Background | Palette | Where |
+|---|---|---|
+| Dark — deep navy gradient `#060B1A` | magenta accent `#FF40FF`, body `#EAF0FF`, muted `#D6DCEA`, teal `#2BD9C7` for structure labels | [profiles/aurora-black](profiles/aurora-black/PROFILE.md) · deck-build `style.js` |
+| Light — white `#FFFFFF` | purple accent `#8A3FFC`, body `#161D26`, muted `#5B6573`, two semantic colors (blue `#0972D3`, orange `#C2410C` as text) | [profiles/light](profiles/light/PROFILE.md) |
+
+Palettes do not transfer between backgrounds: the dark magenta accent on white is 2.8:1 and the dark body text 1.1:1; the
+light purple accent on deep navy is 3.9:1. When the background changes, recompute the accent first, then text and muted.
 
 ## Adaptation to other backgrounds
 
@@ -33,7 +44,7 @@ If your background is not NAVY, recalculate:
 
 ## GRAY discipline
 
-GRAY is the most-misused color in dark-background decks. The rule:
+GRAY is the most-misused color in any deck — MUTED on a light background follows the same rule:
 
 - ✅ **Use GRAY** for: bibliographic source (`— Anthropic 2026 Report`), de-emphasized callback to a previous slide, caption under a chart
 - ❌ **Don't use GRAY** for: anything the audience must read, role attribution, operational labels, sub-lines that bridge ideas, `because`/`therefore` connectives
@@ -52,7 +63,7 @@ The audience subconscious reads GRAY as "skip me." Audience-facing prose must be
 When reviewing build code (python-pptx, similar):
 
 ```python
-# Audit: at most 5 distinct RGBColor values + GRAY tint
+# Audit (dark NAVY palette): at most 5 distinct RGBColor values + GRAY tint
 NAVY   = RGBColor(0x23, 0x2F, 0x3E)
 WHITE  = RGBColor(0xFF, 0xFF, 0xFF)
 ORANGE = RGBColor(0xFF, 0x85, 0x00)

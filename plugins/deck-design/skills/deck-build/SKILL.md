@@ -1,6 +1,6 @@
 ---
 name: deck-build
-description: Turn locked slide content into a real .pptx in the deck-mindset house style — a token module, build script patterns, and a validate → render → inspect QA loop. Use when the output must be an actual PowerPoint file (dark-background decks, Korean or English), or when an existing build needs restyling.
+description: Turn locked slide content into a real .pptx in the deck-mindset house style — a token module, build script patterns, and a validate → render → inspect QA loop. Use when the output must be an actual PowerPoint file (dark or light background, Korean or English), or when an existing build needs restyling.
 ---
 
 # Deck Build
@@ -34,7 +34,7 @@ Write them at the top of the build script, use them everywhere, never inline a l
 ```js
 const LATIN   = "Amazon Ember";      // Latin text — the brand face (`latin` slot)
 const KR      = "Noto Sans CJK KR";  // Korean text (`ea` / `cs` slots); also Latin in QA renders (RENDER_CHECK=1)
-const BG      = "060B1A";            // deep navy — the dark surface deck-mindset assumes
+const BG      = "060B1A";            // deep navy — these are the dark (aurora) tokens; a light deck: profiles/light
 const TEXT    = "EAF0FF";            // primary text
 const ACCENT  = "FF40FF";            // the one focal color — subject of the slide
 const SECOND  = "2BD9C7";            // structure labels (lanes, axes) only
@@ -67,8 +67,9 @@ Rules that survive contact with real decks:
   A claim in 10pt gray is a claim nobody reads. If it is the strongest thing on the slide — that the
   presenter built the system, that every number is an assumption — it is either spoken or it is 14pt.
 - **Product names are free.** They do not count toward a slide's text budget — but everything else does.
-- Both `scripts/style.js` (pptxgenjs) and the token list above encode the same vocabulary; keep them in sync
-  with `../deck-mindset/color_vocabulary.md` if you re-calibrate for a different background.
+- `scripts/style.js` (pptxgenjs) and the token list above are the dark palette of the aurora-black profile; a light
+  deck takes its tokens from `../deck-mindset/profiles/light/format_light.py`. All palettes, and how to recalibrate
+  for another background, are in `../deck-mindset/color_vocabulary.md`.
 
 ## Table or cards
 
@@ -83,6 +84,7 @@ Both hold the same content. They differ in **where the eye stops**: a table lets
 
 The deciding question is not which looks better. It is **what the audience should carry out of the room**:
 a *pattern* (table) or a *number* (cards).
+If the presenter will animate the slide, no table object — see lessons ("Build for animation").
 
 Two traps:
 
@@ -121,6 +123,7 @@ and it is invisible in code review because the numbers look plausible.
   after `writeFile()`; python-pptx sets `ea`/`cs` per run (the aurora-black profile's `format_aurora.py`).
   Amazon Ember is not installed on Linux, so QA renders set Latin to Noto too (`RENDER_CHECK=1`); Latin widths
   differ slightly from the brand face — leave ~10% slack in boxes with long Latin runs.
+  Pick the Korean face by the machine that presents: on a Mac, `Apple SD Gothic Neo` (reference/korean-deck-notes.md).
 - **QA render spacing:** LibreOffice inserts visible gaps in mixed Korean/Latin runs (`AI 를`, `6 개월째`).
   That is the renderer, not the file. Do not "fix" it by editing the text.
 - **Korean filenames break python-pptx.** macOS-normalized (NFD) names raise `PackageNotFoundError`
@@ -166,11 +169,12 @@ Re-render only the slides you changed, then stop. Two QA passes is normal; five 
 ## Quick start
 
 ```bash
-npm install pptxgenjs                     # only if require('pptxgenjs') fails
-python scripts/gradient_bg.py assets/bg.png
-node examples/example_deck.js             # writes out/example.pptx
-python scripts/set_ea_font.py out/example.pptx
-python scripts/qa.py out/example.pptx
+cd examples
+npm install pptxgenjs                                # only if require('pptxgenjs') fails
+python ../scripts/gradient_bg.py assets/bg.png
+node example_deck.js                                 # writes out/example.pptx
+python ../scripts/set_ea_font.py out/example.pptx
+python ../scripts/qa.py out/example.pptx
 ```
 
 Then copy `examples/example_deck.js`, replace the content, and keep the helpers.
@@ -180,7 +184,7 @@ Then copy `examples/example_deck.js`, replace the content, and keep the helpers.
 - [ ] Content was approved before the first build
 - [ ] Every color and size comes from the token block
 - [ ] One focal color per slide; nothing below the 15pt floor except citations
-- [ ] Latin = Amazon Ember, Korean = Noto Sans CJK KR on every run (`set_ea_font.py` after pptxgenjs)
+- [ ] Latin = Amazon Ember, Korean = Noto Sans CJK KR (Apple SD Gothic Neo on a Mac presenter) on every run (`set_ea_font.py` after pptxgenjs)
 - [ ] Validator passes with no findings
 - [ ] Every slide has been viewed as an image, not just built
 - [ ] Boundary-carrying shapes verified against the constant, not by eye

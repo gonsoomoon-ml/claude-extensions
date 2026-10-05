@@ -2,6 +2,8 @@
 
 When building a slide, *first* pick the closest layout below; deviate only with explicit reason. Visual rhyme across the deck depends on layout reuse.
 
+Sizes in the anatomies are the M1 deck's (2026-05). Build with the type scale instead — 40 · 30 · 24 · 18 · 15 (+10 cite), three per slide — and no underline bar under a question headline (dropped 2026-09).
+
 ## Why naming matters
 
 Without names, every slide is a one-off design decision. With names, the deck has a **shared vocabulary** between writer and reviewer:

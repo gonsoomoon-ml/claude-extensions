@@ -18,7 +18,7 @@ Use **after** you have a built `.pptx` that passes Phase-1 programmatic QA (15pt
 - Audit a deck someone else built against deck-mindset rules
 
 Do **not** use for:
-- Pre-Phase-1 work — use `qa_validate.py` first; the agents assume floor compliance
+- Pre-Phase-1 work — run deck-build `scripts/qa.py` first (and the profile's `check_slides` for a python-pptx build); the agents assume floor compliance
 - Single-slide review (overhead too high; just look at it yourself)
 - Decks without a parallel mockup md (no canonical text → Critic B can't compare)
 
@@ -192,7 +192,7 @@ deck-agent-team/
 # 0. Set env vars (or pass via CLI flags)
 export DECK_AGENT_BUILD_SCRIPT=build/build_full.py
 export DECK_AGENT_MOCKUP_MD=docs/slides/my_mockup.md
-export DECK_AGENT_QA_VALIDATOR=/path/to/qa_validate.py    # optional
+export DECK_AGENT_QA_VALIDATOR=/path/to/deck-build/scripts/qa.py    # optional
 
 # 1. Render + extract + write handoff
 python3 orchestrator.py --target build/MyDeck.pptx
@@ -219,8 +219,14 @@ For Critic B to work, your mockup md must follow:
 
 - Slide headers: `### #N` where N is integer or `N.5` (sub-section). `★` allowed in header.
 - Slide body: a fenced code block (```` ``` ````) immediately after the header. The first fence's contents = canonical text. Subsequent fences and prose are ignored.
-- Box-drawing glyphs (`╔╗╚╝═─━│┌┐└┘├┤┬┴┼║`) are stripped — they're design intent, not literal output.
-- Letter-spaced emphasis (`A I 코 딩` — single chars separated by single spaces) is normalized to `AI코딩`.
+- Box-drawing glyphs (the Unicode box block U+2500–257F) are stripped — they're design intent, not literal output.
+- One text element per line. A box diagram with several columns side by side merges them into one line, and margin
+  notes inside the fence (`← 30 bold`) read as slide text — both come back as missing / paraphrase. For such a mock,
+  put the slide's text as a plain one-column list in the **first** fence and the diagram in a second fence.
+- If no slide parses, the orchestrator stops (content cannot be checked); slides without text are listed in
+  `canonical_missing` and reported as not checked.
+- Letter-spaced Latin emphasis (`A I` — single letters separated by single spaces) is normalized to `AI`. Korean is
+  left as written — one-syllable words (`한 명 더`) are ordinary text, not letter-spacing.
 - Speaker notes outside the fenced block are ignored — they must NOT leak into the deck face.
 
 If your mockup uses a different shape, adapt `extractors/mockup_parser.py`.
@@ -256,4 +262,3 @@ The 3-iter cycle, score formula, gate, auto-loop are deck-format-agnostic.
 ## Related
 
 - [deck-mindset](../deck-mindset/SKILL.md) — the rules these critics enforce
-- `myslide` skill (oh-my-skills) — Phase-1 `qa_validate.py` validator (if available in your environment)

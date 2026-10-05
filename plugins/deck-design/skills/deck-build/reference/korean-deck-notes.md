@@ -1,6 +1,6 @@
 # Korean decks — build and QA notes
 
-Notes that only show up when the deck is Korean, the background is dark, and QA runs on Linux.
+Notes that only show up when the deck is Korean and QA runs on Linux.
 
 ## Font stack
 
@@ -8,6 +8,7 @@ Notes that only show up when the deck is Korean, the background is dark, and QA 
 |---|---|---|
 | Latin text | `Amazon Ember` | The AWS brand face — the `latin` slot of every run |
 | Korean text | `Noto Sans CJK KR` | Korean-safe, ships with most Linux images — the `ea` and `cs` slots of every run |
+| Korean text, Mac presenter PC | `Apple SD Gothic Neo` | The macOS system face (listed for Sequoia and Tahoe); Noto Sans CJK KR is not, so a stock Mac substitutes it unless installed. Mac-only — keep Noto when the presenting machine is unknown or not a Mac. QA still renders in Noto (`RENDER_CHECK=1`) |
 | QA renders | `Noto Sans CJK KR` for Latin too (`RENDER_CHECK=1`) | Amazon Ember is not installed on Linux; LibreOffice would substitute a face with other widths |
 | Avoid | Calibri, Arial, Aptos as the body face | Latin-only and off-brand; Korean glyphs fall back per character |
 | Avoid | `Malgun Gothic` | Windows-only — LibreOffice substitutes, and the substitute has different widths |
@@ -79,7 +80,7 @@ Relying on the wrap point means the break moves when the font substitutes.
 
 ## Text budget
 
-Counting characters per slide keeps dark decks readable. A workable budget for 13.333 × 7.5 in:
+Counting characters per slide keeps slides readable. A workable budget for 13.333 × 7.5 in:
 
 | Slide type | Budget (characters, product names excluded) |
 |---|---|

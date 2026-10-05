@@ -18,11 +18,11 @@ const T = {
   // RENDER_CHECK=1 → Latin also Noto, because Amazon Ember is not installed on Linux QA machines.
   LATIN: process.env.RENDER_CHECK === "1" ? "Noto Sans CJK KR" : "Amazon Ember",
   KR: "Noto Sans CJK KR",
-  BG: "060B1A", // deep navy surface
+  BG: "060B1A", // deep navy surface — dark palette (aurora-black); a light deck: deck-mindset/profiles/light
   TEXT: "EAF0FF", // primary text
   ACCENT: "FF40FF", // the one focal color per slide
   SECOND: "2BD9C7", // structure labels only (lanes, axes)
-  MUTED: "D6DCEA", // captions, secondary description
+  MUTED: "D6DCEA", // captions and sources only — never text the audience must read
   LINE: "C9D1E3", // card / box border
   SURFACE: "141B30", // card fill
   TITLE: 30,
@@ -94,11 +94,11 @@ function takeaway(s, text, { y = 6.1, color = T.TEXT } = {}) {
   }));
 }
 
-/** Citation / assumption line — the only chrome allowed at the bottom. */
+/** Citation line (title + https) — the only chrome allowed at the bottom, right-aligned. Not for claims. */
 function source(s, text, { y = 7.02 } = {}) {
   s.addText(text, textBase({
     x: T.MARGIN, y, w: T.W - T.MARGIN * 2, h: 0.3,
-    fontSize: T.CITE, color: T.MUTED,
+    fontSize: T.CITE, color: T.MUTED, align: "right",
   }));
 }
 
@@ -123,7 +123,7 @@ function card(pres, s, { x, y, w, h, line = T.LINE, transparency = 25 }) {
 }
 
 /** Horizontal or vertical arrow between two points. */
-function arrow(pres, s, { x, y, w = 0, h = 0, color = T.ACCENT, width = 1.5 }) {
+function arrow(pres, s, { x, y, w = 0, h = 0, color = T.MUTED, width = 1.5 }) {   // structure, not focus
   s.addShape(pres.ShapeType.line, {
     x, y, w, h,
     line: { color, width, endArrowType: "triangle" },
@@ -134,7 +134,7 @@ function arrow(pres, s, { x, y, w = 0, h = 0, color = T.ACCENT, width = 1.5 }) {
  * A vertical boundary that carries meaning (on-prem | cloud, before | after).
  * Returns the x it was drawn at so callers derive box positions from it instead of guessing.
  */
-function boundary(pres, s, { x, y, h, color = T.ACCENT, transparency = 40 }) {
+function boundary(pres, s, { x, y, h, color = T.LINE, transparency = 40 }) {   // structure, not focus
   s.addShape(pres.ShapeType.rect, {
     x, y, w: 0.045, h,
     fill: { color, transparency },
@@ -146,7 +146,7 @@ function boundary(pres, s, { x, y, h, color = T.ACCENT, transparency = 40 }) {
 /* ── table ───────────────────────────────────────────────────────────── */
 
 /**
- * Comparison table: header row in ACCENT, hairline under the header, no other borders.
+ * Comparison table: header row in TEXT bold (two accent heads would make two focal points).
  * rows = [[h1, h2, ...], [c1, c2, ...], ...]
  */
 function table(s, rows, { x = T.MARGIN, y, w = T.W - T.MARGIN * 2, colW, rowH = 0.68, firstColBold = true } = {}) {
@@ -155,9 +155,9 @@ function table(s, rows, { x = T.MARGIN, y, w = T.W - T.MARGIN * 2, colW, rowH = 
       text: String(cell),
       options: {
         fontFace: T.LATIN,
-        fontSize: T.BODY, // header and body share BODY; the header differs by ACCENT + bold
+        fontSize: T.BODY, // header and body share BODY; the header differs by bold
         bold: ri === 0 || (firstColBold && ci === 0),
-        color: ri === 0 ? T.ACCENT : T.TEXT,
+        color: T.TEXT,
         valign: "middle",
       },
     })),

@@ -28,7 +28,7 @@ const { T } = S;
     isTextBox: true, margin: 0, x: T.MARGIN, y: 1.55, w: 11.7, h: 0.75,
     fontFace: T.LATIN, fontSize: T.HEADLINE, bold: true, color: T.TEXT,
   });
-  S.eyebrow(s, "The one sentence a listener repeats afterwards", { y: 2.45, color: T.MUTED, size: T.TAKEAWAY });
+  S.eyebrow(s, "The one sentence a listener repeats afterwards", { y: 2.45, color: T.TEXT, size: T.TAKEAWAY });
   S.eyebrow(s, "2026-09-30", { y: 4.5, color: T.MUTED, size: T.MID });
   s.addText("Presenter Name", {
     isTextBox: true, margin: 0, x: T.MARGIN, y: 4.95, w: 6, h: 0.4,
@@ -46,7 +46,7 @@ const { T } = S;
   S.table(
     s,
     [
-      ["", "Today", "Proposed"],
+      ["", "All data on premises", "Only restricted data on premises"],
       ["Can start now", "0 — everything blocked", "40 — where data has no constraint"],
       ["On-prem hardware", "all 100 cases", "25 — only data that cannot leave"],
       ["Keys handed out", "one per system and person", "none"],
@@ -54,7 +54,7 @@ const { T } = S;
     { y: 1.6, colW: [3.2, 3.6, 4.9] },
   );
   S.takeaway(s, "A quarter of the hardware, and it starts this quarter", { y: 5.4 });
-  S.source(s, "Numbers are assumptions until the first workshop replaces them.");
+  S.source(s, "Example source — https://example.com/sizing-study");
   s.addNotes("Read the table row by row. The last row is the one to pause on.");
 }
 
@@ -70,10 +70,10 @@ const { T } = S;
   const RIGHT_BOX = { x: WALL + 0.5, w: 3.9 };
 
   S.boundary(pres, s, { x: WALL, y: 1.35, h: 4.3 });
-  S.eyebrow(s, "On premises", { y: 1.0, color: T.MUTED });
+  S.eyebrow(s, "On premises", { y: 1.0, color: T.SECOND });
   s.addText("Cloud", {
     isTextBox: true, margin: 0, x: WALL + 0.5, y: 1.0, w: 3, h: 0.35,
-    fontFace: T.LATIN, fontSize: T.BODY, color: T.MUTED,
+    fontFace: T.LATIN, fontSize: T.BODY, color: T.SECOND,
   });
 
   const rows = [
@@ -89,7 +89,7 @@ const { T } = S;
       fontFace: T.LATIN, fontSize: T.BODY, bold: true, color: T.TEXT,
     });
     const x0 = 3.6;
-    S.arrow(pres, s, { x: x0, y: y + 0.28, w: r.box.x - x0 - 0.05, color: i === 0 ? T.SECOND : T.ACCENT });
+    S.arrow(pres, s, { x: x0, y: y + 0.28, w: r.box.x - x0 - 0.05 });
     S.card(pres, s, { x: r.box.x, y: y - 0.05, w: r.box.w, h: 0.82 });
     s.addText(r.model, {
       isTextBox: true, margin: 0, x: r.box.x + 0.18, y: y - 0.02, w: r.box.w - 0.3, h: 0.35,
@@ -97,7 +97,7 @@ const { T } = S;
     });
     s.addText(r.note, {
       isTextBox: true, margin: 0, x: r.box.x + 0.18, y: y + 0.36, w: r.box.w - 0.3, h: 0.34,
-      fontFace: T.LATIN, fontSize: T.BODY, color: T.MUTED,
+      fontFace: T.LATIN, fontSize: T.BODY, color: T.TEXT,
     });
   });
 
@@ -105,6 +105,7 @@ const { T } = S;
   s.addNotes("Read all three rows the same way: team on the left, model on the right.");
 }
 
+require("fs").mkdirSync(path.join(HERE, "out"), { recursive: true }); // writeFile does not create folders
 pres
   .writeFile({ fileName: path.join(HERE, "out", "example.pptx") })
   .then((f) => console.log("written", f));
