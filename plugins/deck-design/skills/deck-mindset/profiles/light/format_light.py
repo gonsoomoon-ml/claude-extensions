@@ -12,7 +12,9 @@ No template file is needed: new_presentation() starts from python-pptx's default
 - Fonts: Latin in Amazon Ember; Korean by the machine that presents — Noto Sans CJK KR by default,
   DECK_FONT_KR="Apple SD Gothic Neo" for a Mac. RENDER_CHECK=1 renders both in Noto Sans CJK KR (QA on Linux).
 - No chrome: no logo, footer or page number. The cite line is the only furniture. No speaker notes, no
-  animations — the presenter animates by hand, one named group per reveal step.
+  animations — the presenter animates by hand. No groups either (PowerPoint cannot animate a shape inside a
+  group): every shape is named by its reveal step ("click1 · card A"), and a name and its description are
+  two shapes (add_pair), so any piece can get its own animation.
 """
 import os
 import re
@@ -158,6 +160,25 @@ def add_text(container, left, top, width, height, lines, role="body", align=PP_A
     return tb
 
 
+def add_pair(container, left, top, width, height, name, text, name_role="label", role="body",
+             name_color=None, gap=0.12, anchor=MSO_ANCHOR.TOP):
+    """A name and its description on one line as two text boxes, so each can be revealed on its own.
+    The description starts after the measured name + `gap` in; a smaller description drops by 0.95 x the size
+    difference to share the name's baseline (top anchor only — calibrated on Noto Sans CJK KR). The name box
+    does not wrap. Returns (name box, description box)."""
+    name_size, _, _ = ROLE[name_role]
+    size = ROLE[role][0]
+    if name_size != size and anchor != MSO_ANCHOR.TOP:
+        raise ValueError("add_pair: two sizes share a baseline only with anchor=MSO_ANCHOR.TOP")
+    name_w = Inches(width_in(name, name_size, ROLE[name_role][1]) + gap)
+    opts = {"role": name_role} if name_color is None else {"role": name_role, "color": name_color}
+    a = add_text(container, left, top, name_w, height, [[(name, opts)]], role=name_role, anchor=anchor)
+    a.text_frame.word_wrap = False
+    b = add_text(container, left + name_w, top + Pt(round((name_size - size) * 0.95, 2)), width - name_w, height,
+                 text, role=role, anchor=anchor)
+    return a, b
+
+
 def set_title(slide, text):
     """Fill the title placeholder at TITLE_TOP. All four of left/top/width/height are written: writing only
     `top` on an inherited placeholder leaves no size and the title jumps to the left edge. Autofit is off, so
@@ -193,12 +214,46 @@ def _flat(shp):
         style.find(qn("a:effectRef")).set("idx", "0")
 
 
-def add_group(slide, name):
-    """One reveal step. The name ("click1 · …", "start · …") shows in PowerPoint's Selection Pane, where the
-    presenter gives the group one animation. Pass the group instead of the slide to draw inside it."""
-    g = slide.shapes.add_group_shape()
-    g.name = name
-    return g
+class _StepShape:
+    """A shape drawn in a step: reads and writes go to the shape, and a name set later keeps the step prefix."""
+
+    def __init__(self, shape, step):
+        object.__setattr__(self, "_shape", shape)
+        object.__setattr__(self, "_step", step)
+        shape.name = f"{step} · {shape.name}"
+
+    def __getattr__(self, attr):
+        return getattr(self._shape, attr)
+
+    def __setattr__(self, attr, value):
+        setattr(self._shape, attr, f"{self._step} · {value}" if attr == "name" else value)
+
+
+class _StepShapes:
+    def __init__(self, shapes, step):
+        self._shapes, self._step = shapes, step
+
+    def __getattr__(self, attr):
+        fn = getattr(self._shapes, attr)
+        if not attr.startswith("add_"):
+            return fn
+        return lambda *a, **k: _StepShape(fn(*a, **k), self._step)
+
+
+class _Step:
+    def __init__(self, slide, step):
+        self.shapes = _StepShapes(slide.shapes, step)
+
+
+def add_step(slide, step):
+    """One reveal step ("start", "click1", …) — not a group. Pass it instead of the slide: every shape drawn
+    through it lands flat on the slide, named "click1 · <name>". PowerPoint cannot animate a shape inside a
+    group on its own, so the presenter gives a whole step one animation (select its shapes in the Selection
+    Pane) or animates any one piece."""
+    return _Step(slide, step)
+
+
+add_group = add_step   # the 0.4.0 name — no longer makes a group
 
 
 def add_rule(container, left, top, width, color=RULE, weight=0.75):

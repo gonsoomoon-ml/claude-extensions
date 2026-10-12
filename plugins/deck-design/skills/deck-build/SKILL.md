@@ -155,6 +155,32 @@ What actually shows up in this pass, in frequency order:
 
 Re-render only the slides you changed, then stop. Two QA passes is normal; five means the content was not locked.
 
+## Making an existing deck animatable
+
+PowerPoint animates a group, or a box, as one object. A deck whose reveal steps are groups, or whose boxes hold
+a name and its description together, cannot reveal its pieces one by one. `scripts/split_for_animation.py`
+fixes that on a copy:
+
+```bash
+python scripts/split_for_animation.py deck.pptx --list                         # groups + text boxes, H?/V? hints
+python scripts/split_for_animation.py deck.pptx --h 3:3,11 --v 5:18 -o deck-split.pptx
+```
+
+- Every group is ungrouped. Its shapes are renamed `<step> · <name>` from the group name (`click1 · options` →
+  `click1 · card A`), and an animation on the group is copied to each shape — the first on the click, the rest
+  "with previous" — so the slide plays as before.
+- `--h` splits one line of name + description into two boxes side by side; `--v` splits a name paragraph over a
+  description into two shapes with the same frame. A filled card keeps the name; the description goes on a
+  transparent copy on top.
+- **Which boxes to split is a judgment call, not the script's.** Split two texts with different roles (bold name +
+  regular description); keep emphasis inside one sentence whole. The `--list` hints are structural only — on the
+  deck this was written for, 15 of 16 were right; the 16th was one sentence with a larger second half.
+- Render before and after with `qa.py` and compare. Stacked splits should not move a pixel; side-by-side splits
+  are placed with Noto widths, so check them on the presenting machine.
+
+New builds should not need it: the light profile draws no groups (`add_step`) and puts a name and its
+description in two shapes (`add_pair`).
+
 ## Files
 
 | File | Purpose |
@@ -163,6 +189,7 @@ Re-render only the slides you changed, then stop. Two QA passes is normal; five 
 | `scripts/gradient_bg.py` | Generates the dark gradient background PNG (Pillow) |
 | `scripts/qa.py` | Validate → PDF → per-slide JPEG, prints absolute paths to inspect |
 | `scripts/set_ea_font.py` | After a pptxgenjs build: puts the Korean face into the ea/cs slots of every run, Latin untouched |
+| `scripts/split_for_animation.py` | Existing deck → every piece animatable: ungroups (names keep the step), splits name/description boxes, carries animations over |
 | `examples/example_deck.js` | Three slides — cover, comparison table, boundary diagram — using the helpers |
 | `reference/korean-deck-notes.md` | Long-form notes: font stack, render artifacts, NFD filenames, reusing an existing deck's theme |
 
@@ -189,3 +216,4 @@ Then copy `examples/example_deck.js`, replace the content, and keep the helpers.
 - [ ] Every slide has been viewed as an image, not just built
 - [ ] Boundary-carrying shapes verified against the constant, not by eye
 - [ ] Speaker notes are in `addNotes`, not on the slide
+- [ ] Animated slides: no table object or group holds a piece that is revealed on its own; a name and its description are two shapes

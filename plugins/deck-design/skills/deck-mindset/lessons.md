@@ -1,6 +1,6 @@
 # Lessons — learned from rendered slides and presenter reviews
 
-Evidence-backed lessons from the aurora-black deck (53 slides, 2026-09) and the LLM Day build-up deck (12 slides, 2026-10). Each one was learned from a rendered test slide
+Evidence-backed lessons from the aurora-black deck (53 slides, 2026-09), the LLM Day build-up deck (12 slides, 2026-10) and the HarnessOps session deck (11 slides, 2026-10). Each one was learned from a rendered test slide
 or a presenter review, not from theory. The deck itself is described in
 [examples/aurora_case_study.md](examples/aurora_case_study.md); the template-specific rules are in
 [profiles/aurora-black/PROFILE.md](profiles/aurora-black/PROFILE.md).
@@ -25,10 +25,11 @@ or a presenter review, not from theory. The deck itself is described in
 - **Write sizes as roles, not numbers — and let the build stop on a violation.** Keep one role table in the build helper (`headline 40 bold · title 30 bold · callout 18 bold accent · body 15 · cite 10 …`) and give every text element a role, never a literal size. The per-slide rules — sizes only from the scale, three per slide, an 18 beside a 15 must be bold or the accent — then hold by construction. Measured on the LLM Day deck (2026-10): the v2 build with literal sizes had three size violations (two 48pt headlines, one regular 18); the v3 build written with roles had none across 12 slides. A check that runs before `save()` and exits on a violation catches what roles cannot — text overflowing its box — but its width estimate is calibrated to one font set and renderer, so keep it in the profile helper, not as a general tool (`profiles/light/format_light.py`).
 - **Build for animation; leave the animation to the presenter.** The build writes no animations, but the slide must be easy to animate by hand:
   - **No table objects.** PowerPoint animates a table as one object — rows and cells cannot appear one by one. Draw the same grid as separate shapes (a block map or cards).
-  - **One named group per reveal step** (`click1 · …`, and `start · …` for what shows first), so the presenter finds each step in the Selection Pane and gives it one animation. Citations show from the start.
+  - **No groups — name every shape by its reveal step** (`click1 · card A`, and `start · …` for what shows first). PowerPoint cannot give a shape inside a group an animation of its own, so one group per step (the rule until deck-design 0.4.0) let the presenter animate a step but none of its pieces. On the HarnessOps session deck (11 slides, 2026-10-12) the presenter asked for every text to animate on its own, and 36 groups had to be flattened after the fact. Step-prefixed names keep the reveal order in the Selection Pane: the presenter selects a step's shapes for one animation, or animates any one piece. Citations show from the start.
+  - **A name and its description are two shapes.** A bold name and a regular description in one box — two runs side by side, or two paragraphs — can only appear together; the same deck had 15 such boxes split. Stacked splits (two shapes with the same frame, each keeping an empty paragraph as tall as the other's text) rendered pixel-identical; side-by-side splits moved ≤0.05in in the QA render, only because LibreOffice pads Korean/Latin boundaries inside a run. Emphasis inside one sentence stays one box — structure alone cannot tell it from a name (on that deck, 1 of 16 structural candidates was one sentence), so the split is decided by eye (`deck-build/scripts/split_for_animation.py`).
   - **A change of state is a new shape on top.** An animation can reveal a shape but not restyle one: dim with a semi-transparent white veil, highlight with a frame drawn at the card's exact geometry (a frame offset outward shows a double border).
 
-  Write the reveal order under each mock, so the groups and the presenter's plan agree.
+  Write the reveal order under each mock, so the shape names and the presenter's plan agree.
 
 ## Process lessons
 

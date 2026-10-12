@@ -1,5 +1,6 @@
 """Three example slides on the light profile — statement + option cards, block arrow into slots,
-answers revealed with frames, veils and line arrows. Every reveal step is a named group.
+answers revealed with frames, veils and line arrows. No groups: every shape is named by its reveal step, and a
+name and its description are two shapes, so the presenter can animate any piece on its own.
 
     RENDER_CHECK=1 python3 example_build.py          # QA build (Noto for both faces) → out/example_light.pptx
     python3 ../../../deck-build/scripts/qa.py out/example_light.pptx
@@ -8,7 +9,7 @@ import os
 from pptx.util import Inches as I
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from format_light import (
-    new_presentation, content_slide, statement_slide, add_text, add_cite, add_box, add_group, add_frame,
+    new_presentation, content_slide, statement_slide, add_text, add_pair, add_cite, add_box, add_step, add_frame,
     add_veil, add_badge, add_block_arrow, add_arrow, drop_empty_placeholders, check_slides,
     count_text, X0, CONTENT_W, ACCENT, MUTED, WHITE, BLUE, BLUE_TEXT, BLUE_TINT, ORANGE, ORANGE_TEXT,
     ORANGE_TINT,
@@ -45,33 +46,33 @@ add_text(s, X0, I(1.1), CONTENT_W, I(1.5),
          ["새 서비스를 다음 달까지", [("운영에 올려야", {"color": ACCENT}), (" 한다면", {})]],
          role="headline", line_spacing=1.0).name = "start · scene"
 add_text(s, X0, I(2.95), CONTENT_W, I(0.6), "어떻게 배포하시겠습니까?", role="hero_question").name = "click1 · question"
-option_cards(add_group(s, "click2 · options"), 3.95, 1.6, "card")
+option_cards(add_step(s, "click2"), 3.95, 1.6, "card")
 drop_empty_placeholders(s)
 
 # ── 2 · block arrow = the slide's one core action (plug the pieces in)
 # start = platform + pieces → click1 = block arrows → click2 = bridge line
 s = content_slide(prs, "직접 쓴 세 조각을 플랫폼에 끼운다")
 PANEL_R, PIECE_X, ROWS = 7.75, 8.6, [2.05, 3.05, 4.05]
-g = add_group(s, "start · platform")
+g = add_step(s, "start")
 add_box(g, I(LEFT), I(1.2), I(PANEL_R - LEFT), I(3.85), fill=BLUE_TINT, line=BLUE, line_w=1.25).name = "platform"
-add_text(g, I(LEFT + 0.25), I(1.4), I(4.5), I(0.3),
-         [[("관리형 플랫폼", {"role": "label", "color": BLUE_TEXT}), ("  가져다 쓴다", {"role": "body"})]],
-         role="body").name = "platform head"
+head, note = add_pair(g, I(LEFT + 0.25), I(1.4), I(4.5), I(0.3), "관리형 플랫폼", "가져다 쓴다", name_color=BLUE_TEXT)
+head.name, note.name = "platform head", "platform note"
 for k, chip in enumerate(["실행", "확장", "로그"]):
     add_box(g, I(LEFT + 0.25), I(ROWS[k]), I(2.2), I(0.7), chip, role="body", fill=WHITE, line=None,
             anchor=MSO_ANCHOR.MIDDLE).name = f"chip {chip}"
 for k in range(3):
     add_box(g, I(5.55), I(ROWS[k]), I(1.95), I(0.7), "끼울 자리", role="body", fill=WHITE, line=BLUE, dash=True,
             align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE).name = f"slot {k + 1}"
-g = add_group(s, "start · pieces")
+g = add_step(s, "start")
 add_text(g, I(PIECE_X), I(1.4), I(RIGHT - PIECE_X), I(0.3), [[("직접 정의한다", {"role": "label", "color": ORANGE_TEXT})]],
          role="label").name = "pieces head"
 for k, (name, detail) in enumerate([("설정 파일", "환경마다 다른 값"), ("배포 스크립트", "올리는 순서"),
                                     ("경보 규칙", "언제 깨울지")]):
-    add_box(g, I(PIECE_X), I(ROWS[k]), I(RIGHT - PIECE_X), I(0.7),
-            [[(name, {"role": "label", "color": ORANGE_TEXT}), ("  " + detail, {"role": "body"})]],
-            fill=ORANGE_TINT, line=ORANGE, anchor=MSO_ANCHOR.MIDDLE).name = f"piece {name}"
-g = add_group(s, "click1 · plug in")
+    add_box(g, I(PIECE_X), I(ROWS[k]), I(RIGHT - PIECE_X), I(0.7), fill=ORANGE_TINT, line=ORANGE).name = f"piece {name}"
+    head, note = add_pair(g, I(PIECE_X + PAD), I(ROWS[k]), I(RIGHT - PIECE_X - 2 * PAD), I(0.7), name, detail,
+                          name_color=ORANGE_TEXT, anchor=MSO_ANCHOR.MIDDLE)
+    head.name, note.name = f"piece {name} · name", f"piece {name} · note"
+g = add_step(s, "click1")
 for k in range(3):
     add_block_arrow(g, I(7.8), I(ROWS[k] + 0.15), I(0.7), I(0.4), direction="left", color=ORANGE).name = f"plug {k + 1}"
 add_text(s, X0, I(5.45), CONTENT_W, I(0.36),
@@ -85,17 +86,18 @@ drop_empty_placeholders(s)
 s = content_slide(prs, "빨리 올리려면 관리형, 익숙하면 컨테이너")
 CARD_Y, CARD_H = 1.3, 1.6
 bottom = CARD_Y + CARD_H
-cards = option_cards(add_group(s, "start · options"), CARD_Y, CARD_H, "body")
+cards = option_cards(add_step(s, "start"), CARD_Y, CARD_H, "body")
 for step, (i, answer, why) in enumerate([(1, "컨테이너 플랫폼", "이미 쓰는 도구 그대로"),
                                          (2, "관리형 서비스", "가장 빨리 올리려면")], 1):
-    g = add_group(s, f"click{step} · {'ABCD'[i]}")
+    g = add_step(s, f"click{step}")
     add_frame(g, cards[i]).name = f"frame {'ABCD'[i]}"
     cx = card_x(i) + CARD_W / 2
     add_arrow(g, I(cx), I(bottom + 0.03), I(cx), I(bottom + 0.45), color=ACCENT, weight=1.5).name = "answer arrow"
-    add_text(g, I(card_x(i)), I(bottom + 0.5), I(CARD_W), I(0.6),
-             [[(answer, {"role": "label", "color": ACCENT})], [(why, {"role": "body"})]],
-             role="body", align=PP_ALIGN.CENTER, line_spacing=1.0).name = f"answer {'ABCD'[i]}"
-g = add_group(s, "click3 · dimmed")
+    add_text(g, I(card_x(i)), I(bottom + 0.5), I(CARD_W), I(0.3), [[(answer, {"role": "label", "color": ACCENT})]],
+             role="label", align=PP_ALIGN.CENTER, line_spacing=1.0).name = f"answer {'ABCD'[i]}"
+    add_text(g, I(card_x(i)), I(bottom + 0.76), I(CARD_W), I(0.3), why,
+             role="body", align=PP_ALIGN.CENTER, line_spacing=1.0).name = f"answer {'ABCD'[i]} · why"
+g = add_step(s, "click3")
 for i, why in [(0, "운영 인력이 따로 든다"), (3, "기한을 못 맞춘다")]:
     add_veil(g, cards[i]).name = f"veil {'ABCD'[i]}"
     add_text(g, I(card_x(i)), I(bottom + 0.5), I(CARD_W), I(0.3), [[(why, {"role": "body", "color": MUTED})]],

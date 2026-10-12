@@ -6,7 +6,8 @@ purple focal color (`#8A3FFC`) plus two semantic colors (blue, orange) whose mea
 / 18 / 15 (+10 cite), three per slide, written as role names; content slides on `Title Only` with the title 0.15 in from
 the top, statement slides on `Blank`. Latin in Amazon Ember, Korean by the presenting machine (Noto Sans CJK KR, or
 Apple SD Gothic Neo on a Mac). `check_slides()` stops the build on a size, title or overflow violation. The build writes
-no animations — every reveal step is a named group the presenter animates by hand. The body below is in Korean.
+no animations and no groups — every shape is named by its reveal step (`click1 · …`) and a name and its description are
+two shapes, so the presenter can animate a whole step or any one piece by hand. The body below is in Korean.
 
 **Origin.** Generalized from a 12-slide session build-up deck on a light template (2026-10) — the rules, roles and checks
 below are the ones that held there; template-specific pieces (gradient layouts, layout names) were left out.
@@ -84,9 +85,11 @@ below are the ones that held there; template-specific pieces (gradient layouts, 
 ## 6. 애니메이션 준비 — 애니메이션 자체는 발표자가 건다
 
 - **표 개체를 쓰지 않는다.** 표는 한 덩어리로만 움직인다 — 같은 격자를 도형(블록 지도 · 카드)으로 그린다.
-- **나타나는 단계마다 이름 붙은 그룹 하나**(`click1 · …`, 처음부터 보이는 것은 `start · …`) — 선택 창에서 찾아 애니메이션 하나씩 건다. 출처는 처음부터.
+- **그룹을 쓰지 않는다 — 도형마다 나타나는 단계 이름을 붙인다**(`click1 · card A`, 처음부터 보이는 것은 `start · …`). 그룹 안의 도형은 따로 움직일 수 없다. 슬라이드 대신 `add_step(slide, "click1")` 을 넘기면 그 안에서 그린 도형이 그룹 없이 놓이고 이름 앞에 단계가 붙는다. 발표자는 선택 창에서 한 단계의 도형을 함께 골라 애니메이션 하나를 걸거나, 조각 하나에만 건다. 출처는 처음부터.
+- **이름과 설명은 두 도형**(`add_pair`). 한 상자에 굵은 이름 + 일반 설명(나란한 두 글 조각, 또는 위아래 두 문단)을 넣으면 함께만 나타난다. 문장 안의 강조는 한 상자 그대로.
 - **상태가 바뀌면 새 도형을 위에 얹는다.** 애니메이션은 도형을 나타나게 할 수 있을 뿐 바꾸지 못한다: 흐리게 = `add_veil`(알파 40% 흰 막), 강조 = `add_frame`(카드와 같은 자리 — 바깥으로 띄우면 이중선).
-- 목업마다 아래에 나타나는 순서를 적는다 — 그룹과 발표자의 계획이 맞게.
+- 목업마다 아래에 나타나는 순서를 적는다 — 도형 이름과 발표자의 계획이 맞게.
+- 이미 그룹으로 만든 덱은 `../../../deck-build/scripts/split_for_animation.py` 로 바꾼다 — 그룹 해제, 이름 · 설명 분리, 그룹에 걸린 애니메이션은 조각마다 옮긴다.
 
 ## 7. 검수
 

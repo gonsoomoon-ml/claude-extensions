@@ -17,6 +17,7 @@ You can use them **independently or together**. They share design intent but hav
 | Designing a new deck from scratch | **deck-mindset** (read SKILL.md, pick layouts, allocate colors) |
 | Producing the .pptx once content is locked | **deck-build** (tokens → build script → validate → render → look) |
 | A Korean-language deck | **deck-build** (font stack, render artifacts, NFD filenames) |
+| Making an existing deck animatable piece by piece | **deck-build** `scripts/split_for_animation.py` (ungroup, split name/description boxes, keep animations) |
 | Building on the AWS black template | **deck-mindset** `profiles/aurora-black/` (base template, tokens, named layout builders) + **deck-build** QA loop |
 | Building on a plain white background | **deck-mindset** `profiles/light/` (no template file; role table, helpers, build check) + **deck-build** QA loop |
 | Auditing rules manually (no automation) | **deck-mindset** (squint test, hierarchy check, color-cap audit) |
@@ -135,6 +136,7 @@ plugins/deck-design/
     │   │   ├── style.js                  ← tokens + slide helpers (pptxgenjs)
     │   │   ├── qa.py                     ← validate → PDF → per-slide JPEG
     │   │   ├── set_ea_font.py            ← Korean face into ea/cs after a pptxgenjs build
+    │   │   ├── split_for_animation.py    ← existing deck → every piece animatable (ungroup, split boxes)
     │   │   └── gradient_bg.py            ← dark gradient background PNG
     │   ├── examples/
     │   │   └── example_deck.js           ← cover · comparison table · boundary diagram

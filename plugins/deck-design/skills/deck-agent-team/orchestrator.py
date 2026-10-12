@@ -86,7 +86,7 @@ def render_previews(pptx_path: Path, preview_dir: Path,
 # ---------------------------------------------------------------------------
 
 def _walk(shapes):
-    """Every shape, descending into groups — decks built for animation keep each reveal step in a group."""
+    """Every shape, descending into groups — decks built before deck-design 0.5.0 keep each reveal step in a group."""
     from pptx.enum.shapes import MSO_SHAPE_TYPE
     for shape in shapes:
         if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
