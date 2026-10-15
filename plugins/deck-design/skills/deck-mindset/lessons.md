@@ -13,6 +13,8 @@ or a presenter review, not from theory. The deck itself is described in
 - **Cite = title + https URL, one per line, full width, bottom-right, just above the template copyright.** A short-title cite in a narrow box wraps every URL.
 - **Title ≤ 34 chars on 13.33in at 30pt bold.** `add_title()` prints a warning; shorten the sentence, never the font.
 - **Title close to the top — 0.15–0.3in from the top edge — at the same spot on every content slide.** Template title placeholders often sit lower (the AWS LLM Day light template: 1.00in from the top) and leave an empty band above the title; the presenter asked to move it up on both decks (aurora `TITLE_TOP = 0.32in`; LLM Day deck 1.00 → 0.50 → 0.30 → 0.15in over three review rounds, 2026-10-04) — so start high instead of stepping up. Move the placeholder and shift the content by the same amount. In python-pptx set `left`, `top`, `width` and `height` together — writing only `top` on an inherited placeholder leaves `<a:off x="0">` with no size, and the title jumps to the left edge.
+- **Corner radius in inches, not as a share.** A rounded rectangle's adjustment is a share of its shorter side, so one value rounds a tall panel far more than a short one — 0.13in against 0.07in on the HarnessOps AgentCore slide (2026-10-15); the light example's 3.85in panel got 0.31in, its 0.7in slots 0.06in. Both profiles now take the radius in inches and convert per shape (`format_light.RADIUS` 0.10in, aurora 0.12in).
+- **One-line labels never wrap — and need slack where Korean meets Latin.** A chip, tag or badge that breaks ("Polic / y") reads as two items: set `wrap="none"` and size it to the measured text (`add_chip`). In LibreOffice QA renders a label mixing Korean, Latin and punctuation runs wider than `width_in`: "에이전트, MCP, 스킬 찾기 · 관리" measured 3.45in and still wrapped in a 3.60in box; it fit at 3.99in. Leave 10–15% for such labels.
 - **3 sizes per slide from the scale (e.g., 30/18/15) + 10pt cite exception.** Hierarchy comes from weight and the single accent color.
 - **Box padding is not optional** — 0.12in sides / 0.08in top-bottom, and shorten text that would wrap past the box height.
 - **Flow diagrams: number badges on arrows + a numbered list beside the diagram.** Labels on arrows collide the moment text is longer than a few words.
@@ -30,6 +32,14 @@ or a presenter review, not from theory. The deck itself is described in
   - **A change of state is a new shape on top.** An animation can reveal a shape but not restyle one: dim with a semi-transparent white veil, highlight with a frame drawn at the card's exact geometry (a frame offset outward shows a double border).
 
   Write the reveal order under each mock, so the shape names and the presenter's plan agree.
+
+## Grouped slides — labels, names, visuals
+
+(learned on the HarnessOps deck's AgentCore overview slide, 2026-10-15 — chip groups, but the rules hold for any slide that groups items under labels: cards, columns, lanes)
+
+- **A group label maps to its items, left to right.** Read each label against the items under it — "도구 연결 · 인증" over [Gateway] [Identity]; "기억 · 기본 도구" over [Memory] and then the tools — and reorder the items or the words until they match. When no wording maps, the grouping is wrong, not the label: "평가 · 등록" held Evaluations and Registry, which the vendor documents apart; moving Evaluations beside Observability gave "관찰 · 평가 · 개선" over Observability · Evaluations · Optimization.
+- **One unit per set of items, named as the source names them.** Items on one slide are all services or all features — Recommendations and A/B testing were features of AgentCore Optimization, so they became one item — and the names come from the vendor's own service list, read on the raw page (Managed Knowledge Base, not Knowledge Base). A descriptor that explains one item of a group, or repeats the previous slide, adds text without information: cut it.
+- **No generic icons for things that have official ones.** Cloud services and products have official icon sets; a generic icon on them, or on a group of them, suggests something that does not exist. Use the official set or none, and show what the source documents as a relationship with line arrows and placement — the AgentCore improvement loop (Observability → Evaluations → Optimization → back) became three thin arrows, not a sentence.
 
 ## Process lessons
 

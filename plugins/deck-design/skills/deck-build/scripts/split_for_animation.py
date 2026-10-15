@@ -23,7 +23,9 @@ regular description, therefore cannot reveal its pieces one by one. On a copy of
 Which boxes to split is a judgment call, so the script never guesses: run --list, then name shape ids.
 Split a box that holds two texts with different roles shown by styling (a bold name + a regular
 description). Leave inline emphasis inside one sentence, and lines of one style, whole. --list marks
-structural candidates (H? / V?) — a hint, not a decision.
+structural candidates (H? / V?) — a hint, not a decision — and a size with * when the run has none of its
+own (inherited, often 18pt): PowerPoint can drop a run's size while the presenter edits, so check those.
+Placeholders inherit their size from the layout by design and are not marked.
 
     python split_for_animation.py deck.pptx --list
     python split_for_animation.py deck.pptx --h 3:3,11 --h 4:11 --v 5:18,21 -o deck-split.pptx
@@ -115,6 +117,12 @@ def run_size(r, body):
         return int(rpr.get("sz")) / 100
     d = body.find("a:lstStyle/a:lvl1pPr/a:defRPr", NS)
     return int(d.get("sz")) / 100 if d is not None and d.get("sz") else DEFAULT_SIZE
+
+
+def own_size(r):
+    """True if the run writes its own size (not inherited from the list style or PowerPoint's default)."""
+    rpr = r.find("a:rPr", NS)
+    return rpr is not None and bool(rpr.get("sz"))
 
 
 def run_bold(r):
@@ -462,12 +470,13 @@ def describe(sp):
     inside a sentence is emphasis far more often than a name."""
     body = sp.find("p:txBody", NS)
     paras = [p for p in body.findall("a:p", NS) if "".join(map(run_text, p.findall("a:r", NS))).strip()]
+    placeholder = sp.find("p:nvSpPr/p:nvPr/p:ph", NS) is not None
     shown, styles = [], []
     for p in paras:
         runs = [r for r in p.findall("a:r", NS) if run_text(r).strip()]
         styles.append([run_style(r, body)[:2] for r in runs])
-        shown.append(" ".join(f"[{'B' if run_bold(r) else 'R'}{run_size(r, body):g} {run_text(r).strip()[:22]!r}]"
-                              for r in runs))
+        shown.append(" ".join(f"[{'B' if run_bold(r) else 'R'}{run_size(r, body):g}{'' if placeholder or own_size(r) else '*'} "
+                              f"{run_text(r).strip()[:22]!r}]" for r in runs))
     hint = ""
     if len(paras) == 1 and len(styles[0]) >= 2:
         changes = sum(a != b for a, b in zip(styles[0], styles[0][1:]))

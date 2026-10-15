@@ -32,6 +32,7 @@ below are the ones that held there; template-specific pieces (gradient layouts, 
 - 템플릿 파일 없음 — python-pptx 기본 덱을 13.333 × 7.5in 로 바꿔 쓴다. 배경 흰색, 로고 · 바닥글 · 장 번호 없음. 출처 줄만 얹는다.
 - 내용 장 = `Title Only`(진짜 제목 칸 — 개요 보기 · 화면 낭독기가 제목으로 읽는다), 질문 장 = `Blank`.
 - 제목은 위에서 0.15in, 모든 내용 장에서 같은 자리. `set_title()` 은 left · top · width · height 넷을 함께 쓴다(top 만 쓰면 제목이 왼쪽 끝으로 튄다). 자동 축소는 끈다 — 길면 글자가 아니라 문장을 줄인다.
+- 모서리 둥글기는 인치로(`RADIUS` 0.10) — 둥근 사각형의 값은 짧은 변에 대한 비율이라, 그대로 쓰면 큰 판일수록 모서리가 커진다. `add_box` 가 도형마다 바꿔 계산한다.
 - 기본 테마의 도형 효과에는 그림자가 있다. 빈 `effectLst` 만으로는 LibreOffice 검수 렌더가 그림자를 그대로 그려서, 헬퍼가 스타일 참조(`effectRef`)도 0 으로 둔다(`_flat`).
 
 ## 2. 색 — 역할 고정, 장마다 3~4색
@@ -80,6 +81,7 @@ below are the ones that held there; template-specific pieces (gradient layouts, 
 | 글 속 → | 문장의 일부 — 도형으로 바꾸지 않는다(줄이 바뀌면 어긋난다) |
 | `add_marker` | ▶ ▲ 가리키는 표시 — 글리프가 아니라 도형이라 크기 · 색이 토큰을 따른다 |
 | `add_badge` | 보기 카드의 A~D |
+| `add_chip` | 한 줄 이름표(제품 이름 · 태그) — 글자 폭에 맞춰 크기를 정하고 줄을 바꾸지 않는다 |
 | `add_frame` · `add_veil` | 강조 테두리 · 흐리게 덮는 막 — 아래 6 |
 
 ## 6. 애니메이션 준비 — 애니메이션 자체는 발표자가 건다
@@ -97,4 +99,5 @@ below are the ones that held there; template-specific pieces (gradient layouts, 
 2. `qa.py` — 파일 검증 → PDF → 장마다 JPEG → **이미지를 직접 본다**
 3. 발표 PC(PowerPoint)에서 마지막 확인 — 글꼴 · 애니메이션
 
+- 한글과 영문 · 기호가 섞인 한 줄 이름표는 `width_in` 보다 10–15% 넓게 — QA 렌더가 경계를 넓힌다(3.45in 로 잰 이름표가 3.60in 칸에서 꺾였다). 칩 · 태그는 `add_chip` 으로 줄을 바꾸지 않게 한다.
 - 넘침 추정은 Noto Sans CJK KR + LibreOffice 렌더에 맞춰 보정했다(한글도 띄어쓰기에서 꺾인다 · 줄 높이 1.23em · Amazon Ember 라틴 최대 +10%). 다른 글꼴 · 렌더러에서는 먼저 자기 렌더로 다시 맞춘다.

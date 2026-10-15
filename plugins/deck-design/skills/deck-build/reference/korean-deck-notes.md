@@ -40,6 +40,11 @@ Do not "fix" it by deleting characters — the deck will then be wrong in PowerP
 What *is* a real defect in the render: text touching or crossing its box edge, and any line that wraps
 where the author did not intend.
 
+The padding also makes one-line labels wider than a Noto measurement: "에이전트, MCP, 스킬 찾기 · 관리" (18pt
+bold) measured 3.45in, wrapped in a 3.60in box and fit at 3.99in (2026-10-15). Give one-line labels that mix
+Korean, Latin and punctuation 10–15% slack, and set `wrap="none"` on chips and tags so a wider font runs to
+the edge instead of breaking a name.
+
 ## Korean filenames break python-pptx
 
 A macOS-created file whose name contains Korean is usually NFD-normalized. Linux tools list it fine, but

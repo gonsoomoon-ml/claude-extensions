@@ -78,6 +78,8 @@ TITLE_TOP = Inches(0.15)          # title close to the top — the same spot on 
 TITLE_H = Inches(0.65)
 CONTENT_TOP = Inches(1.0)         # below the title
 
+RADIUS = 0.10                     # corner radius in inches — the same on every card, chip, frame and veil
+
 LAYOUT_CONTENT = "Title Only"     # content slides — a real title placeholder (outline view, screen readers)
 LAYOUT_STATEMENT = "Blank"        # statement / question slides
 
@@ -267,14 +269,16 @@ def add_rule(container, left, top, width, color=RULE, weight=0.75):
 
 
 def add_box(container, left, top, width, height, lines=None, role="body", fill=CARD_FILL, line=BOX_LINE,
-            line_w=0.75, align=PP_ALIGN.LEFT, anchor=MSO_ANCHOR.TOP, radius=0.08, pad_x=0.16, pad_y=0.12,
+            line_w=0.75, align=PP_ALIGN.LEFT, anchor=MSO_ANCHOR.TOP, radius=RADIUS, pad_x=0.16, pad_y=0.12,
             line_spacing=1.1, space_after=0, dash=False):
-    """Card or box with optional text. fill=None / line=None for no fill / no border."""
+    """Card or box with optional text. fill=None / line=None for no fill / no border. radius is in inches
+    (0 = square corners): a rounded rectangle's own value is a share of its shorter side, so one fixed value
+    rounds a tall panel far more than a chip — converting per shape keeps every corner the same."""
     size, bold, color = ROLE[role]
     shp = container.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE if radius else MSO_SHAPE.RECTANGLE,
                                      int(left), int(top), int(width), int(height))
     if radius:
-        shp.adjustments[0] = radius
+        shp.adjustments[0] = min(0.5, Inches(radius) / min(int(width), int(height)))
     if fill is None:
         shp.fill.background()
     else:
@@ -298,14 +302,31 @@ def add_box(container, left, top, width, height, lines=None, role="body", fill=C
     return shp
 
 
-def add_frame(container, card, color=ACCENT, weight=2.25, radius=0.08):
+def add_chip(container, left, top, text, role="body", fill=TILE_FILL, color=None, height=None, pad_x=0.12):
+    """One-line label in a pill — a product name, a tag. Sized to the measured text (width_in) and never
+    wrapped: a name that breaks ("Polic / y") reads as two items, and a font a little wider than the estimate
+    should run to the pill's edge, not onto a second line. Returns the chip; left + chip.width is where the
+    next one starts. A label mixing Korean with Latin or punctuation gets 12% more — QA renders widen those
+    boundaries (PROFILE §7)."""
+    size, bold, _ = ROLE[role]
+    h = Inches(height if height else round(size / 72 * 1.6 + 0.1, 2))      # 15pt → 0.43in · 18pt → 0.50in
+    mixed = any("가" <= c <= "힣" for c in text) and any(c.isascii() and not c.isspace() for c in text)
+    w = Inches(width_in(text, size, bold) * (1.12 if mixed else 1.0) + 2 * pad_x)
+    opts = {"role": role} if color is None else {"role": role, "color": color}
+    chip = add_box(container, left, top, w, h, [[(text, opts)]], role=role, fill=fill, line=None,
+                   anchor=MSO_ANCHOR.MIDDLE, pad_x=pad_x, pad_y=0, line_spacing=1.0)
+    chip.text_frame.word_wrap = False
+    return chip
+
+
+def add_frame(container, card, color=ACCENT, weight=2.25, radius=RADIUS):
     """Highlight a card as a later reveal step: a border at the card's exact geometry, drawn on top. The wider
     line covers the card's own border — a frame offset outward shows a double border."""
     return add_box(container, card.left, card.top, card.width, card.height, fill=None, line=color,
                    line_w=weight, radius=radius)
 
 
-def add_veil(container, card, alpha=40, radius=0.08):
+def add_veil(container, card, alpha=40, radius=RADIUS):
     """Dim a card as a later reveal step: a white shape at alpha % opacity on top. An animation can reveal a
     shape but cannot restyle an existing one, so a change of state is always a new shape."""
     pad = Inches(0.02)

@@ -167,7 +167,9 @@ def add_box(slide, left, top, width, height, text_lines, size=BODY, bold=False, 
     shp = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE if radius else MSO_SHAPE.RECTANGLE,
                                  left, top, width, height)
     if radius:
-        shp.adjustments[0] = 0.12
+        # 0.12in on every box: a rounded rectangle's own value is a share of its shorter side, so a fixed
+        # value would round a tall box far more than a short one
+        shp.adjustments[0] = min(0.5, Inches(0.12) / min(width, height))
     if fill is None:
         shp.fill.background()
     else:

@@ -86,6 +86,8 @@ Beyond layouts, recurring card patterns:
 - **Card-size variance for emphasis** — breaks comparison frame. Use outline + bold instead.
 - **Hierarchy via tightening below 15pt** — raise the higher role, never drop the lower one.
 - **Hue outside the vocabulary** — most templates have purples/teals that fail contrast on the deck's background.
+- **Generic icons for things that have official icons** — cloud services, products, logos. Use the official set or none; show relationships with line arrows and placement.
+- **A group label that does not map to its items** — read the label's words against the items, left to right; when no wording maps, regroup the items (lessons: "Grouped slides").
 
 ## Example
 

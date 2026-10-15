@@ -155,6 +155,15 @@ What actually shows up in this pass, in frequency order:
 
 Re-render only the slides you changed, then stop. Two QA passes is normal; five means the content was not locked.
 
+**When the presenter has edited the deck**, compare it with the version you delivered (text per shape) before
+commenting, and check two things PowerPoint does silently:
+
+- A slide pasted from another deck with "use destination theme" takes the new background but keeps its own
+  text colors — a white title on a white slide. Check every pasted slide's text against its background.
+- A run can lose its explicit size while being edited and then inherits the default (18pt).
+  `scripts/split_for_animation.py deck.pptx --list` marks such runs with `*` — on the HarnessOps deck
+  (2026-10-15) eight shapes on four slides had gone from 15pt to an inherited 18pt.
+
 ## Making an existing deck animatable
 
 PowerPoint animates a group, or a box, as one object. A deck whose reveal steps are groups, or whose boxes hold
