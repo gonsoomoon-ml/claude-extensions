@@ -1,0 +1,10 @@
+{
+  "name": "concise-response",
+  "version": "0.1.0",
+  "description": "Summary-first responses in every session: start with a short summary (conclusion + key bullets), add only the concise details needed, and give full detail only when the user asks. Injected at session start via a SessionStart hook, so it composes with any output style.",
+  "author": {
+    "name": "gonsoomoon-ml"
+  },
+  "homepage": "https://github.com/gonsoomoon-ml/claude-extensions",
+  "license": "MIT"
+}

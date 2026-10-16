@@ -1,0 +1,22 @@
+{
+  "name": "gonsoomoon-extensions",
+  "owner": {
+    "name": "gonsoomoon-ml"
+  },
+  "metadata": {
+    "description": "Plugins from gonsoomoon-ml/claude-extensions: deck-design (slide deck design and build) and concise-response (summary-first responses).",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "deck-design",
+      "source": "./plugins/deck-design",
+      "description": "Build slide decks that survive critic review: deck-mindset (design rules and template profiles), deck-build (tokens, build patterns, validate → render → inspect QA loop) and deck-agent-team (Phase-2 review via parallel critic agents with a PASS/FAIL gate)."
+    },
+    {
+      "name": "concise-response",
+      "source": "./plugins/concise-response",
+      "description": "Summary-first responses in every session, injected by a SessionStart hook: short summary first, only the details needed, full detail on request."
+    }
+  ]
+}
