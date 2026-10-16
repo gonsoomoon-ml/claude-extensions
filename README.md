@@ -71,7 +71,7 @@ mkdir -p ~/.claude/skills/my-skill
 | 플러그인 | 포함된 스킬 | 설명 |
 |------|------|------|
 | [deck-design](plugins/deck-design/README.md) | deck-mindset · deck-build · deck-agent-team | 슬라이드 데크 디자인 규칙 (5색 vocabulary · 15pt floor · 3-tier 위계 · 5 named layouts · 템플릿 프로필 aurora-black) + 빌드 도구 (토큰 · pptxgenjs/python-pptx 패턴 · 검증 → 렌더 → 확인 QA, 라틴 Amazon Ember + 한글 Noto) + Phase-2 검토용 critic agent team (visual / content / cognitive / compliance + synthesizer + gate) |
-| [concise-response](plugins/concise-response/README.md) | — (SessionStart hook) | 모든 세션에서 요약 먼저 응답: 짧은 요약(결론·핵심 bullet) → 필요한 세부만 → 상세는 요청할 때만. output style 을 바꾸지 않고 덧붙이는 방식이라 다른 스타일과 함께 쓸 수 있음 |
+| [concise-response](plugins/concise-response/README.md) | — (SessionStart hook) | 모든 세션에서 요약 먼저·한국어로 응답: 짧은 요약(결론·핵심 bullet) → 필요한 세부만 → 상세는 요청할 때만. 영어 프롬프트에도 한국어로 답함(영어는 요청 시). output style 을 바꾸지 않고 덧붙이는 방식이라 다른 스타일과 함께 쓸 수 있음 |
 
 이 레포 자체가 마켓플레이스(`gonsoomoon-extensions`)입니다.
 

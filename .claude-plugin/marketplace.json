@@ -16,7 +16,7 @@
     {
       "name": "concise-response",
       "source": "./plugins/concise-response",
-      "description": "Summary-first responses in every session, injected by a SessionStart hook: short summary first, only the details needed, full detail on request."
+      "description": "Summary-first responses in Korean, injected by a SessionStart hook: short summary first, only the details needed, full detail on request; Korean replies to English or Korean prompts (English on request)."
     }
   ]
 }

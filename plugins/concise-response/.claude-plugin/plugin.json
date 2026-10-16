@@ -1,7 +1,7 @@
 {
   "name": "concise-response",
-  "version": "0.1.0",
-  "description": "Summary-first responses in every session: start with a short summary (conclusion + key bullets), add only the concise details needed, and give full detail only when the user asks. Injected at session start via a SessionStart hook, so it composes with any output style.",
+  "version": "0.2.0",
+  "description": "Summary-first responses in Korean, in every session: start with a short summary (conclusion + key bullets), add only the concise details needed, give full detail only when the user asks, and respond in Korean whether the prompt is in English or Korean (English only on request). Injected at session start via a SessionStart hook, so it composes with any output style.",
   "author": {
     "name": "gonsoomoon-ml"
   },
