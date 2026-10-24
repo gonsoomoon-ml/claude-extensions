@@ -42,7 +42,7 @@ LinkedIn·피드 포스팅에 첨부할 **인포그래픽 이미지 1장**을 �
 cd skills/infographic-build
 cp templates/scheme-c-structure-compare.html /path/to/post/my-image.html   # tokens.css, base.css 도 같이 복사
 python3 scripts/render.py /path/to/post/my-image.html /path/to/post/my-image.png      # 1080x1350, 2배
-python3 scripts/lint.py /path/to/post/my-image.report.json --source /path/to/post/my-image.html
+python3 scripts/lint.py /path/to/post/my-image.report.json --source /path/to/post/my-image.html --budget 650   # 예산: 도식 A 400 · B 450 · C 650
 ```
 
 가로형(도식 A)은 `--width 1200 --height 800` 으로 렌더합니다.

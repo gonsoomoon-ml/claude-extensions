@@ -15,7 +15,7 @@ description: Turn an approved infographic mockup into a PNG — tokens.css + bas
 | 2 | Copy a template | `templates/scheme-*.html` with `tokens.css` and `base.css` beside the post | you start from a blank page |
 | 3 | Fill it | text in HTML, shapes as inline SVG with `s-*` classes | a literal hex, or a px for a token role |
 | 4 | Render | `python3 scripts/render.py page.html out.png` (add `--width 1200 --height 800` for scheme A) | `maxBottom` past the canvas |
-| 5 | Lint | `python3 scripts/lint.py out.report.json --source page.html` | any FAIL |
+| 5 | Lint | `python3 scripts/lint.py out.report.json --source page.html --budget 650` — budget per scheme: A 400 · B 450 · C 650 | any FAIL |
 | 6 | Look | open the PNG and walk `reference/defects.md` | you are reading code instead of the render |
 
 Repeat 3 to 6 until lint passes **and** looking finds nothing. Lint cannot see a detached arrowhead or two boxes overlapping.

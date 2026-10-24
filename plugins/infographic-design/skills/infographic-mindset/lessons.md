@@ -6,7 +6,7 @@ Same three briefs, same two reference images, same prompt. The baseline agents r
 
 | # | Check | Pass condition |
 |---|---|---|
-| 1 | Canvas | 1080 × 1350 portrait (S1, S2); 1200 × 800 landscape allowed for S3 |
+| 1 | Canvas | 1080 × 1350 portrait; landscape 1200 × 800 only for scheme A (S3's brief fits scheme A) |
 | 2 | Korean renders | no tofu |
 | 3 | Body text | S1 ≤ 650, S2 ≤ 450, S3 ≤ 400 chars (sources excluded) |
 | 4 | Smallest text | ≥ 16 px at 1080-width equivalent |
@@ -61,6 +61,8 @@ What the agents wrote when they obeyed the rules (from their `decisions.md`):
 - S1 found a defect in the scheme C template itself: the call and return lines to the right-hand box ran 2.5 px apart and read as one line. Fixed in the template (22 px apart at the top, 40 px at the bottom).
 
 Known gaps after this round:
+- The comparison agents were the same model family as the one that wrote the skill, run in the same session, with the plugin's own `render.py` and `lint.py` available to copy. The rows show the text binds that model; they do not show it binds a different one.
+- S2 and S3 passed `--budget 450` / `--budget 400` to the lint on their own, inferred from `schemes.md`; the build SKILL.md they read did not say to. The pipeline row now names the budget per scheme.
 - Every agent self-approved its ASCII mockup because the test prompt forbade questions. In real use the mockup goes to the person first; the skill text says so, the test could not exercise it.
 - No run used a reference palette different from the default, so `sample_colors.py` → `tokens.css` substitution is untested by agents (only by hand).
 - S1 stays contaminated by design; re-test that genre with S4-style fresh briefs.
