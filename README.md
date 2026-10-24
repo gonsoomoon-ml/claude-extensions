@@ -72,6 +72,7 @@ mkdir -p ~/.claude/skills/my-skill
 |------|------|------|
 | [deck-design](plugins/deck-design/README.md) | deck-mindset · deck-build · deck-agent-team | 슬라이드 데크 디자인 규칙 (5색 vocabulary · 15pt floor · 3-tier 위계 · 5 named layouts · 템플릿 프로필 aurora-black) + 빌드 도구 (토큰 · pptxgenjs/python-pptx 패턴 · 검증 → 렌더 → 확인 QA, 라틴 Amazon Ember + 한글 Noto) + Phase-2 검토용 critic agent team (visual / content / cognitive / compliance + synthesizer + gate) |
 | [concise-response](plugins/concise-response/README.md) | — (SessionStart hook) | 모든 세션에서 요약 먼저·한국어로 응답: 짧은 요약(결론·핵심 bullet) → 필요한 세부만 → 상세는 요청할 때만. 영어 프롬프트에도 한국어로 답함(영어는 요청 시). output style 을 바꾸지 않고 덧붙이는 방식이라 다른 스타일과 함께 쓸 수 있음 |
+| [infographic-design](plugins/infographic-design/README.md) | infographic-mindset · infographic-build | LinkedIn·피드 포스팅용 인포그래픽 이미지 1장. 판단 기준 (3초 메시지 · 흐림 테스트 · 본문 글자 예산, 캔버스 4:5/3:2 와 16px 하한은 피드가 정함, 강조색 1종) + 게시된 이미지에서 뽑은 설계 도식 3종 (개념도·구조도 2단 / 질문+측정 카드+막대 / 긴장 헤드라인+구조 비교+실루엣 대응) + 빌드 도구 (tokens.css · base.css · HTML/SVG 템플릿 3종 · Chromium 렌더+보고서 · 넘침/글자 예산/최소 크기/연회색/강조색/hex 린트 · 실제 렌더에서 나온 결함표 12가지) |
 
 이 레포 자체가 마켓플레이스(`gonsoomoon-extensions`)입니다.
 
@@ -79,6 +80,7 @@ mkdir -p ~/.claude/skills/my-skill
 /plugin marketplace add gonsoomoon-ml/claude-extensions
 /plugin install deck-design@gonsoomoon-extensions
 /plugin install concise-response@gonsoomoon-extensions
+/plugin install infographic-design@gonsoomoon-extensions
 /reload-plugins
 ```
 

@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>scheme C: tension headline + structure compare + silhouette match</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="base.css">
+<style>
+  /* scheme-local layout only. Colors and sizes come from tokens.css. */
+  .compare { display: flex; align-items: flex-start; }
+  .col { width: 450px; }
+  .mid { width: 68px; display: flex; justify-content: center; padding-top: 20px; color: var(--accent); font-size: 54px; font-weight: 700; }
+  .col-head { height: 66px; display: flex; flex-direction: column; justify-content: flex-end; margin-bottom: 8px; }
+  .col-head .title { font-size: var(--fs-section); font-weight: 700; line-height: 1.2; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- band A: two context lines, one dominant headline -->
+<section data-band="headline">
+  <p class="context"><b>Anthropic</b><span class="date">(10/22)</span>서브에이전트를 메인 루프로 합쳐 넣어라</p>
+  <p class="context"><b>저희 팀</b><span class="date">(10/21)</span>8개 에이전트 프로덕션 사례, Deep Insight</p>
+  <h1 class="headline">모순일까? 조건이 다를 뿐이다</h1>
+</section>
+
+<hr class="rule">
+
+<!-- band B: two structures drawn as shapes. Left: one blob. Right: one-to-many tree. -->
+<section data-band="compare" class="compare">
+  <div class="col">
+    <div class="col-head"><span class="kicker">기본값</span><span class="title">싱글 에이전트 + Skills</span></div>
+    <svg width="450" height="240" viewBox="0 0 450 240">
+      <rect x="1.5" y="1.5" width="447" height="237" rx="20" class="s-box"/>
+      <text x="22" y="36" font-size="21" class="s-text bold">하나의 컨텍스트</text>
+      <rect x="150" y="56" width="150" height="62" rx="12" class="s-box-strong"/>
+      <text x="225" y="97" font-size="28" text-anchor="middle" class="s-text bold">Agent</text>
+      <!-- loop: arc plus a hand-drawn arrowhead. A marker on an arc end renders wrong. -->
+      <path d="M 336.5 72.3 A 17 17 0 1 1 319.5 72.3" class="s-line-accent"/>
+      <polygon points="321.2,71.3 315.9,80.1 310.9,71.5" class="s-arrow-accent"/>
+      <text x="336" y="134" font-size="17" text-anchor="middle" class="s-text-accent bold">하나의 루프</text>
+      <line x1="225" y1="118" x2="225" y2="152" class="s-line"/>
+      <line x1="100" y1="152" x2="350" y2="152" class="s-line"/>
+      <line x1="100" y1="152" x2="100" y2="168" class="s-line"/>
+      <line x1="225" y1="152" x2="225" y2="168" class="s-line"/>
+      <line x1="350" y1="152" x2="350" y2="168" class="s-line"/>
+      <rect x="41" y="168" width="118" height="50" rx="25" class="s-box-gray"/>
+      <rect x="166" y="168" width="118" height="50" rx="25" class="s-box-gray"/>
+      <rect x="291" y="168" width="118" height="50" rx="25" class="s-box-gray"/>
+      <text x="100" y="201" font-size="24" text-anchor="middle" class="s-text bold">Skill</text>
+      <text x="225" y="201" font-size="24" text-anchor="middle" class="s-text bold">Skill</text>
+      <text x="350" y="201" font-size="24" text-anchor="middle" class="s-text bold">Tool</text>
+      <text x="225" y="231" font-size="17" text-anchor="middle" class="s-text-2">필요할 때만 불러오는 Skills · 도구</text>
+    </svg>
+    <ul class="notes">
+      <li>상태(장바구니·이력·선호)가 한곳에</li>
+      <li>짧은 턴 · 빠른 응답 · 전문성은 Skill로</li>
+      <li class="ex">예: 커머스 에이전트 (Anthropic)</li>
+    </ul>
+  </div>
+
+  <div class="mid">→</div>
+
+  <div class="col">
+    <div class="col-head"><span class="kicker accent">이 조건이 생기면</span><span class="title">서브에이전트를 도구로 호출</span></div>
+    <svg width="450" height="240" viewBox="0 0 450 240">
+      <defs>
+        <marker id="ahR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="s-arrow"/></marker>
+        <marker id="ahRd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="s-arrow-return"/></marker>
+      </defs>
+      <rect x="125" y="2" width="200" height="56" rx="12" class="s-box-strong"/>
+      <text x="225" y="39" font-size="24" text-anchor="middle" class="s-text bold">Orchestrator</text>
+      <text x="333" y="36" font-size="19" class="s-text-2">대화의 주인</text>
+      <!-- fan-out: lines to the left target attach left of lines to the right target, so nothing crosses
+           and arrowheads do not pile onto one point -->
+      <line x1="190" y1="58" x2="77" y2="102" class="s-line" marker-end="url(#ahR)"/>
+      <line x1="220" y1="58" x2="217" y2="102" class="s-line" marker-end="url(#ahR)"/>
+      <line x1="250" y1="58" x2="357" y2="102" class="s-line" marker-end="url(#ahR)"/>
+      <line x1="93" y1="104" x2="202" y2="60" class="s-line-return" marker-end="url(#ahRd)"/>
+      <line x1="233" y1="104" x2="232" y2="60" class="s-line-return" marker-end="url(#ahRd)"/>
+      <line x1="373" y1="104" x2="262" y2="60" class="s-line-return" marker-end="url(#ahRd)"/>
+      <g>
+        <rect x="25" y="104" width="120" height="104" rx="12" class="s-group"/>
+        <rect x="47" y="122" width="76" height="48" rx="9" class="s-box-accent"/>
+        <text x="85" y="157" font-size="30" text-anchor="middle" class="s-text-accent bold">①</text>
+        <text x="85" y="196" font-size="18" text-anchor="middle" class="s-text-2">작은 컨텍스트</text>
+      </g>
+      <g>
+        <rect x="165" y="104" width="120" height="104" rx="12" class="s-group"/>
+        <rect x="187" y="122" width="76" height="48" rx="9" class="s-box-accent"/>
+        <text x="225" y="157" font-size="30" text-anchor="middle" class="s-text-accent bold">②</text>
+        <text x="225" y="196" font-size="18" text-anchor="middle" class="s-text-2">작은 컨텍스트</text>
+      </g>
+      <g>
+        <rect x="305" y="104" width="120" height="104" rx="12" class="s-group"/>
+        <rect x="327" y="122" width="76" height="48" rx="9" class="s-box-accent"/>
+        <text x="365" y="157" font-size="30" text-anchor="middle" class="s-text-accent bold">③</text>
+        <text x="365" y="196" font-size="18" text-anchor="middle" class="s-text-2">작은 컨텍스트</text>
+      </g>
+      <text x="225" y="232" font-size="17" text-anchor="middle" class="s-text-2">실선: 호출 · 점선: 압축된 결과만 반환</text>
+    </svg>
+    <ul class="notes">
+      <li>① 큰 중간 산출물 · ② 독립 검증</li>
+      <li>③ 격리 또는 병렬 실행 (샌드박스)</li>
+      <li class="ex accent">예: Deep Insight (AWS 블로그)</li>
+      <li class="small">①②③은 저자 기준 · Anthropic 10/22의 조건을 바탕으로</li>
+    </ul>
+  </div>
+</section>
+
+<hr class="rule">
+
+<!-- band C: the case drawn in the same silhouette as the right-hand structure -->
+<section data-band="case">
+  <div class="sec-head"><span class="section-title">Deep Insight는 오른쪽 모양이다</span><span class="section-src">AWS 블로그 10/21 · 조건 대응은 저자 해석</span></div>
+  <svg width="968" height="298" viewBox="0 0 968 298">
+    <defs>
+      <marker id="ahD" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="s-arrow"/></marker>
+      <marker id="ahDd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="s-arrow-return"/></marker>
+    </defs>
+    <rect x="369" y="2" width="230" height="52" rx="12" class="s-box-strong"/>
+    <text x="484" y="37" font-size="26" text-anchor="middle" class="s-text bold">Supervisor</text>
+    <text x="612" y="34" font-size="20" class="s-text-2">전문 에이전트를 도구로 호출</text>
+    <line x1="441" y1="54" x2="214" y2="96" class="s-line" marker-end="url(#ahD)"/>
+    <line x1="474" y1="54" x2="474" y2="96" class="s-line" marker-end="url(#ahD)"/>
+    <line x1="507" y1="54" x2="764" y2="96" class="s-line" marker-end="url(#ahD)"/>
+    <line x1="254" y1="98" x2="463" y2="56" class="s-line-return" marker-end="url(#ahDd)"/>
+    <line x1="494" y1="98" x2="494" y2="56" class="s-line-return" marker-end="url(#ahDd)"/>
+    <line x1="804" y1="98" x2="527" y2="56" class="s-line-return" marker-end="url(#ahDd)"/>
+    <!-- three boxes 280 wide at centers 184 / 484 / 784: width must stay below the center spacing.
+         call (solid) and return (dotted) lines to the same box attach 22 px apart at the top and 40 px at the
+         bottom, so the pair reads as two lines (at 12 px they merged into one). -->
+    <rect x="44" y="98" width="280" height="80" rx="12" class="s-box-accent"/>
+    <text x="64" y="130" font-size="25" class="s-text bold">Coder <tspan class="s-text-accent">①</tspan></text>
+    <text x="64" y="162" font-size="18" class="s-text-2">코드 실행 · 큰 중간 데이터</text>
+    <rect x="344" y="98" width="280" height="80" rx="12" class="s-box-accent"/>
+    <text x="364" y="130" font-size="25" class="s-text bold">Validator <tspan class="s-text-accent">②</tspan></text>
+    <text x="364" y="162" font-size="18" class="s-text-2">원본 데이터로 다시 계산</text>
+    <rect x="644" y="98" width="280" height="80" rx="12" class="s-box"/>
+    <text x="664" y="130" font-size="25" class="s-text bold">Reporter</text>
+    <text x="664" y="162" font-size="18" class="s-text-2">DOCX 보고서 작성</text>
+    <line x1="184" y1="178" x2="184" y2="202" class="s-line" marker-end="url(#ahD)"/>
+    <rect x="19" y="204" width="330" height="70" rx="12" class="s-box-accent"/>
+    <text x="39" y="233" font-size="23" class="s-text bold">Fargate 샌드박스 <tspan class="s-text-accent">③</tspan></text>
+    <text x="39" y="261" font-size="18" class="s-text-2">세션마다 격리된 컨테이너에서 실행</text>
+    <text x="966" y="292" font-size="17" text-anchor="end" class="s-text-3">실행 계층만 표시 · Coordinator · Planner · Plan Reviewer · Tracker는 생략</text>
+  </svg>
+</section>
+
+<hr class="rule">
+
+<!-- band D: the one sentence that survives a repost -->
+<section data-band="takeaway">
+  <p class="takeaway">질문은 “싱글 vs 멀티”가 아니라<br>“컨텍스트를 어디서 나눌 것인가”</p>
+  <p class="sub-takeaway">기본값은 단순함 · 가정하지 말고 평가셋으로 측정한다</p>
+  <p class="source">출처: Anthropic, The anatomy of effective commerce agents (2026-09-02) · When to fold subagents into your main agent loop (2026-10-22) · AWS ML Blog, 5 production challenges in multi-agent systems … Deep Insight (2026-10-21)</p>
+</section>
+
+</div>
+</body>
+</html>

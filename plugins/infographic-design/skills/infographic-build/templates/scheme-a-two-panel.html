@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>scheme A: concept map and system diagram, same positions</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="base.css">
+<style>
+  /* landscape canvas for the two-panel scheme; everything else comes from tokens.css */
+  :root { --canvas-w: 1200px; --canvas-h: 800px; --pad-top: 34px; --pad-x: 48px; --pad-bottom: 26px;
+          /* a 1200-wide canvas shows at the same feed width as 1080: scale the small sizes up so nothing drops under 16px at 1080 */
+          --fs-small: 19px; --fs-source: 18px; --fs-label: 20px; --fs-body: 25px; }
+  .panels { display: flex; gap: 24px; }
+  .title-row { display: flex; align-items: baseline; gap: 16px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<section data-band="title" class="title-row">
+  <span class="section-title">사내 문서 검색 봇: 개념도와 시스템 구조도</span>
+  <span class="section-src">예시 콘텐츠 · 왼쪽은 기술 용어 없이, 오른쪽은 실제 구성요소</span>
+</section>
+
+<section data-band="panels" class="panels">
+  <!-- LEFT: concept map in plain words. Same grid positions as the right panel. -->
+  <svg width="540" height="560" viewBox="0 0 540 560">
+    <defs><marker id="aL" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="s-arrow"/></marker></defs>
+    <rect x="0.5" y="0.5" width="539" height="559" rx="18" class="s-panel"/>
+    <text x="24" y="40" font-size="24" class="s-text bold">개념도</text>
+    <text x="104" y="40" font-size="18" class="s-text-2">기술 용어 없이 본 그림</text>
+    <!-- row 1 -->
+    <rect x="10" y="92" width="140" height="76" rx="12" class="s-box"/>
+    <text x="80" y="124" font-size="20" text-anchor="middle" class="s-text bold">직원 채팅창</text>
+    <text x="80" y="150" font-size="18" text-anchor="middle" class="s-text-2">질문하는 곳</text>
+    <rect x="390" y="92" width="140" height="76" rx="12" class="s-box"/>
+    <text x="460" y="124" font-size="20" text-anchor="middle" class="s-text bold">관리자</text>
+    <text x="460" y="150" font-size="18" text-anchor="middle" class="s-text-2">공개 범위 정함</text>
+    <!-- row 2 -->
+    <rect x="10" y="272" width="140" height="76" rx="12" class="s-box-gray"/>
+    <text x="80" y="304" font-size="20" text-anchor="middle" class="s-text bold">문서 창고</text>
+    <text x="80" y="330" font-size="18" text-anchor="middle" class="s-text-2">사내 문서 보관</text>
+    <rect x="200" y="272" width="140" height="76" rx="12" class="s-box-accent"/>
+    <text x="270" y="304" font-size="20" text-anchor="middle" class="s-text-accent bold">검색 안내소</text>
+    <text x="270" y="330" font-size="18" text-anchor="middle" class="s-text-2">질문 받아 찾아줌</text>
+    <rect x="390" y="272" width="140" height="76" rx="12" class="s-box-gray"/>
+    <text x="460" y="304" font-size="20" text-anchor="middle" class="s-text bold">사람 명단</text>
+    <text x="460" y="330" font-size="18" text-anchor="middle" class="s-text-2">누가 어느 부서</text>
+    <!-- row 3 -->
+    <rect x="10" y="452" width="140" height="76" rx="12" class="s-box-gray"/>
+    <text x="80" y="484" font-size="20" text-anchor="middle" class="s-text bold">AI 모델</text>
+    <text x="80" y="510" font-size="18" text-anchor="middle" class="s-text-2">답을 만들어 줌</text>
+    <rect x="390" y="452" width="140" height="76" rx="12" class="s-box-gray"/>
+    <text x="460" y="484" font-size="20" text-anchor="middle" class="s-text bold">기록 장부</text>
+    <text x="460" y="510" font-size="18" text-anchor="middle" class="s-text-2">누가 뭘 물었나</text>
+    <!-- arrows into / out of the center -->
+    <line x1="120" y1="168" x2="225" y2="270" class="s-line" marker-end="url(#aL)"/>
+    <text x="140" y="206" font-size="18" text-anchor="end" class="s-text-2">질문</text>
+    <line x1="420" y1="168" x2="315" y2="270" class="s-line" marker-end="url(#aL)"/>
+    <text x="400" y="206" font-size="18" class="s-text-2">규칙</text>
+    <line x1="150" y1="310" x2="198" y2="310" class="s-line" marker-end="url(#aL)"/>
+    <text x="175" y="300" font-size="18" text-anchor="middle" class="s-text-2">문서</text>
+    <line x1="390" y1="310" x2="342" y2="310" class="s-line" marker-end="url(#aL)"/>
+    <text x="366" y="300" font-size="18" text-anchor="middle" class="s-text-2">권한</text>
+    <line x1="225" y1="348" x2="120" y2="450" class="s-line" marker-end="url(#aL)"/>
+    <text x="140" y="404" font-size="18" text-anchor="end" class="s-text-2">답 생성</text>
+    <line x1="315" y1="348" x2="420" y2="450" class="s-line" marker-end="url(#aL)"/>
+    <text x="400" y="404" font-size="18" class="s-text-2">기록</text>
+  </svg>
+
+  <!-- RIGHT: the actual components. Same positions, same arrows. -->
+  <svg width="540" height="560" viewBox="0 0 540 560">
+    <defs><marker id="aR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="s-arrow"/></marker></defs>
+    <rect x="0.5" y="0.5" width="539" height="559" rx="18" class="s-panel"/>
+    <text x="24" y="40" font-size="24" class="s-text bold">시스템 구조도</text>
+    <text x="188" y="40" font-size="18" class="s-text-2">실제 구성요소</text>
+    <rect x="10" y="92" width="140" height="76" rx="12" class="s-box"/>
+    <text x="80" y="124" font-size="20" text-anchor="middle" class="s-text bold">Slack App</text>
+    <text x="80" y="150" font-size="18" text-anchor="middle" class="s-text-2">chat entry</text>
+    <rect x="390" y="92" width="140" height="76" rx="12" class="s-box"/>
+    <text x="460" y="124" font-size="20" text-anchor="middle" class="s-text bold">Admin</text>
+    <text x="460" y="150" font-size="18" text-anchor="middle" class="s-text-2">scope · ACL</text>
+    <rect x="10" y="272" width="140" height="76" rx="12" class="s-box-gray"/>
+    <text x="80" y="304" font-size="20" text-anchor="middle" class="s-text bold">Docs (S3)</text>
+    <text x="80" y="330" font-size="18" text-anchor="middle" class="s-text-2">documents</text>
+    <rect x="200" y="272" width="140" height="76" rx="12" class="s-box-accent"/>
+    <text x="270" y="304" font-size="20" text-anchor="middle" class="s-text-accent bold">Search API</text>
+    <text x="270" y="330" font-size="18" text-anchor="middle" class="s-text-2">RAG · new</text>
+    <rect x="390" y="272" width="140" height="76" rx="12" class="s-box-gray"/>
+    <text x="460" y="304" font-size="20" text-anchor="middle" class="s-text bold">Okta</text>
+    <text x="460" y="330" font-size="18" text-anchor="middle" class="s-text-2">users · groups</text>
+    <rect x="10" y="452" width="140" height="76" rx="12" class="s-box-gray"/>
+    <text x="80" y="484" font-size="20" text-anchor="middle" class="s-text bold">Bedrock</text>
+    <text x="80" y="510" font-size="18" text-anchor="middle" class="s-text-2">inference</text>
+    <rect x="390" y="452" width="140" height="76" rx="12" class="s-box-gray"/>
+    <text x="460" y="484" font-size="20" text-anchor="middle" class="s-text bold">CloudWatch</text>
+    <text x="460" y="510" font-size="18" text-anchor="middle" class="s-text-2">audit logs</text>
+    <line x1="120" y1="168" x2="225" y2="270" class="s-line" marker-end="url(#aR)"/>
+    <text x="140" y="206" font-size="18" text-anchor="end" class="s-text-2">prompt</text>
+    <line x1="420" y1="168" x2="315" y2="270" class="s-line" marker-end="url(#aR)"/>
+    <text x="400" y="206" font-size="18" class="s-text-2">rules</text>
+    <line x1="150" y1="310" x2="198" y2="310" class="s-line" marker-end="url(#aR)"/>
+    <text x="175" y="300" font-size="18" text-anchor="middle" class="s-text-2">index</text>
+    <line x1="390" y1="310" x2="342" y2="310" class="s-line" marker-end="url(#aR)"/>
+    <text x="366" y="300" font-size="18" text-anchor="middle" class="s-text-2">authz</text>
+    <line x1="225" y1="348" x2="120" y2="450" class="s-line" marker-end="url(#aR)"/>
+    <text x="140" y="404" font-size="18" text-anchor="end" class="s-text-2">answer</text>
+    <line x1="315" y1="348" x2="420" y2="450" class="s-line" marker-end="url(#aR)"/>
+    <text x="400" y="404" font-size="18" class="s-text-2">log</text>
+  </svg>
+</section>
+
+<section data-band="caption">
+  <p class="strip">왼쪽과 오른쪽은 같은 자리의 상자가 같은 구성요소입니다 · 새로 만드는 것은 빨간 상자 하나</p>
+  <p class="caption">생략: 캐시, 재시도, 배포 파이프라인 · 예시 콘텐츠</p>
+</section>
+
+</div>
+</body>
+</html>

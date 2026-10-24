@@ -4,7 +4,7 @@
     "name": "gonsoomoon-ml"
   },
   "metadata": {
-    "description": "Plugins from gonsoomoon-ml/claude-extensions: deck-design (slide deck design and build) and concise-response (summary-first responses).",
+    "description": "Plugins from gonsoomoon-ml/claude-extensions: deck-design (slide deck design and build), concise-response (summary-first responses) and infographic-design (one feed-post infographic that survives blurring and reposting: design schemes, tokens, templates, render and lint).",
     "version": "1.0.0"
   },
   "plugins": [
@@ -17,6 +17,11 @@
       "name": "concise-response",
       "source": "./plugins/concise-response",
       "description": "Summary-first responses in Korean, injected by a SessionStart hook: short summary first, only the details needed, full detail on request; Korean replies to English or Korean prompts (English on request)."
+    },
+    {
+      "name": "infographic-design",
+      "source": "./plugins/infographic-design",
+      "description": "Make one infographic image for a LinkedIn or feed post: infographic-mindset (three tests, canvas and type fixed by the feed, one accent, three design schemes taken from shipped images) and infographic-build (tokens.css + base.css, three HTML/SVG templates, render.py for Chromium PNG + text/layout report, lint.py for overflow, text budget, 16px floor, light small text, one accent, no literal hex, and a defects table)."
     }
   ]
 }

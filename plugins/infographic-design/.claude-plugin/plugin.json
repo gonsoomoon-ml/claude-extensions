@@ -1,0 +1,10 @@
+{
+  "name": "infographic-design",
+  "version": "0.1.0",
+  "description": "Make a single infographic image for a LinkedIn or feed post that still reads when the text is blurred and the post is reposted. Bundles two skills: infographic-mindset (when an image earns its place, the three tests — one message in three seconds, the blur test, a body-text budget — color roles with one accent, a type scale with a 16px floor, and three design schemes taken from shipped images: two-panel concept/system map, question + measured data cards + bars, tension headline + structure compare + case in the same silhouette), and infographic-build (tokens.css + base.css, three HTML/SVG templates, render.py for Chromium PNG + layout/text report, lint.py for overflow, text budget, minimum size, light small text, one accent, no literal hex, and a defects table from real renders). Korean-first (Noto Sans CJK KR), 1080x1350 portrait or 1200x800 landscape at 2x.",
+  "author": {
+    "name": "gonsoomoon-ml"
+  },
+  "homepage": "https://github.com/gonsoomoon-ml/claude-extensions",
+  "license": "MIT"
+}

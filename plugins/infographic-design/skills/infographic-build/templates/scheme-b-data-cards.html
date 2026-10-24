@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>scheme B: question headline, measured cards, bars</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="base.css">
+<style>
+  .bars { display: flex; flex-direction: column; gap: 10px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- band A: statement, then the question that the number answers -->
+<section data-band="headline">
+  <p class="context">번역 품질은 다들 “좋다”고 말한다.</p>
+  <h1 class="headline">그래서 50건을 직접 재봤다</h1>
+  <span class="pill">예시 데이터 · 문서 번역 에이전트 · 50건 · 2주</span>
+</section>
+
+<!-- band B: the claim vs the measurement. Gray = reference, accent = what we measured. -->
+<section data-band="cards" class="cards">
+  <div class="card gray">
+    <div class="card-title">사람 번역 (외주)</div>
+    <div class="big">평균 3.2일</div>
+    <div class="card-sub">접수부터 납품까지</div>
+  </div>
+  <div class="card accent">
+    <div class="card-title">번역 에이전트</div>
+    <div class="big">41분</div>
+    <div class="card-sub">같은 50건 · 검수 포함</div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<!-- band C: how it was measured, as one line and one flow -->
+<section data-band="method">
+  <p class="strip">품질은 원래 재기 어렵다 → 검수자 2명이 같은 척도(1~5)로 blind 채점</p>
+  <div class="flow" style="margin-top:14px">
+    <span class="step">원문 50건</span><span class="arrow">→</span>
+    <span class="step accent">에이전트 + 용어집</span><span class="arrow">→</span>
+    <span class="step">검수자 2명</span>
+  </div>
+  <p class="caption">건마다 점수와 수정 횟수를 기록</p>
+</section>
+
+<!-- band D: the per-item bars, one anomaly flagged in the accent -->
+<section data-band="bars" class="panel">
+  <div class="panel-title">문서 유형별 품질 점수 (5점 만점, 검수자 평균)</div>
+  <div class="bars">
+    <div class="bar-row"><span class="bar-label">매뉴얼</span><div class="bar-track"><div class="bar-fill" style="width:92%"></div></div><span class="bar-value">4.6</span></div>
+    <div class="bar-row"><span class="bar-label">이메일</span><div class="bar-track"><div class="bar-fill" style="width:94%"></div></div><span class="bar-value">4.7</span></div>
+    <div class="bar-row"><span class="bar-label">UI 문자열</span><div class="bar-track"><div class="bar-fill" style="width:90%"></div></div><span class="bar-value">4.5</span></div>
+    <div class="bar-row"><span class="bar-label">보고서</span><div class="bar-track"><div class="bar-fill" style="width:86%"></div></div><span class="bar-value">4.3</span></div>
+    <div class="bar-row"><span class="bar-label">계약서</span><div class="bar-track"><div class="bar-fill" style="width:82%"></div></div><span class="bar-value">4.1</span></div>
+    <div class="bar-row flag"><span class="bar-label">마케팅</span><div class="bar-track"><div class="bar-fill" style="width:68%"></div></div><span class="bar-value">3.4</span></div>
+  </div>
+  <p class="annotation">▲ 마케팅 문서만 낮다: 말투와 슬로건은 용어집이 잡아주지 못한다</p>
+</section>
+
+<!-- band E: cost, with the delta as the biggest number on the page -->
+<section data-band="cost" class="cost">
+  <div class="rows">
+    <div class="panel-title">50건 비용</div>
+    <div class="bars">
+      <div class="bar-row"><span class="bar-label">외주</span><div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--dash)"></div></div><span class="bar-value">640만 원</span></div>
+      <div class="bar-row flag"><span class="bar-label">에이전트</span><div class="bar-track"><div class="bar-fill" style="width:11%"></div></div><span class="bar-value">72만 원</span></div>
+    </div>
+  </div>
+  <div class="delta">−89%</div>
+</section>
+
+<section data-band="source">
+  <p class="source">예시 데이터입니다 · 50건 · 2주 · 검수자 2명 blind 채점(1~5) · 비용은 외주 단가 기준 환산 · 에이전트 시간은 검수 대기 포함</p>
+</section>
+
+</div>
+</body>
+</html>
