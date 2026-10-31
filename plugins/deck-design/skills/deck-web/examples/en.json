@@ -34,7 +34,6 @@
     "카드 둘은 같은 모양: 질문(점선 상자) ▼ 답. 상자 이름은 개념도의 이름 그대로 쓰고 새 말을 만들지 않습니다.": "Both cards share one shape: question (dashed box) ▼ answer. Box names are the concept map's names; coin nothing new.",
     "문제 · 접근 · <b>해법</b> · 적용<span class=\"chip p2\">기둥 2 이름</span>": "Problem · Approach · <b>Solution</b> · Adoption<span class=\"chip p2\">Pillar 2 name</span>",
     "흐름 도식: 상자는 절대 좌표, 선은 SVG 한 장": "Flow diagram: boxes at absolute coordinates, lines in one SVG",
-    "결론 한 줄. <b>굵게</b>는 장당 한두 곳, 기둥 색은 상자 제목에만.": "One takeaway line. <b>Bold</b> once or twice per slide; pillar colors on box titles only.",
     "(1) 단계 이름": "(1) Step name",
     "(2) 단계 이름": "(2) Step name",
     "(3) 단계 이름": "(3) Step name",
@@ -77,6 +76,7 @@
     "<span class=\"c p2\">기둥 2 상자</span><span class=\"s\">Product name</span><span>하는 일 한 줄</span>": "<span class=\"c p2\">Pillar 2 box</span><span class=\"s\">Product name</span><span>What it does, one line</span>",
     "<b>줄임말</b> = 풀이 · <b>줄임말</b> = 풀이<br><b>줄임말</b> = 풀이 · <b>줄임말</b> = 풀이": "<b>Abbr</b> = meaning · <b>Abbr</b> = meaning<br><b>Abbr</b> = meaning · <b>Abbr</b> = meaning",
     "용어 장은 마지막에 둡니다. 본문에서 새 말을 만들지 않았다면 이 장은 짧습니다.": "The glossary goes last. If the body coined no new words, this slide is short.",
-    "<b>굵은 토막</b> — 설명": "<b>Bold phrase</b> — detail"
+    "<b>굵은 토막</b> — 설명": "<b>Bold phrase</b> — detail",
+    "결론 한 줄 — 핵심어 <span class=\"p2\">한두 곳</span>만 기둥 색, <b>굵게</b>도 장당 한두 곳.": "One takeaway line — pillar color on <span class=\"p2\">one or two terms</span>, <b>bold</b> once or twice per slide, too."
   }
 }

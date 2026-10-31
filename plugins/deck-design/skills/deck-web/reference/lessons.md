@@ -17,6 +17,10 @@ lessons live in `../../deck-build/reference/korean-deck-notes.md` and apply here
 - **A fixed pill in the corner is invisible.** The first 한|EN toggle was pinned bottom-right; the author said it
   was not easily visible. It moved into the controls row beside ← 이전 / 다음 → with the same button look (current
   language bold).
+- **Color the key terms, not the sentence.** The author's rule on the first deck: the title and the takeaway
+  carry one to three pillar-colored terms per slide (`.p1` / `.p2`), box titles take their pillar's color and
+  only the focus box doubles its border. Everything else stays white or gray, so the colored term is the
+  thing the eye lands on.
 - **Fullscreen hides the controls row.** Every control needs a key: N notes, F fullscreen, E language.
 - **og:image must be absolute.** The preview card ignores a relative `cover.png`; the deploy script rewrites it to
   `https://<distribution>/cover.png` on every run, so the source file keeps the relative path.

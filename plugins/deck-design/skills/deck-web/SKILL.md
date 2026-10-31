@@ -31,6 +31,9 @@ pptx twin built from the same coordinates.
 - **Tokens** in `:root`: the aurora-black colors (coral = pillar 1, blue = pillar 2, gray = everything else) and
   the type scale 53 / 40 / 32 / 24 / 20 / 13.3 px (= 40 / 30 / 24 / 18 / 15 / 10 pt). Three sizes per slide at
   most, 20 px floor, 13.3 px for sources only.
+- **Color on terms, not sentences**: in the title and the takeaway, the one to three terms that carry the
+  slide take the pillar color (`<span class="p1">` coral, `<span class="p2">` blue); box titles take their
+  pillar's color; everything else stays white or gray. A whole sentence in color reads as decoration.
 - **Layouts in the template**: question cover · rail + title + takeaway · pillar cards (question ▼ answer) and
   option cards (badge · lines · verdict) · bridge chip · flow diagram (absolute nodes + one SVG of connectors) ·
   step grid · glossary rows · figure with overlays. Each is one CSS block — delete the ones the deck does not use.
