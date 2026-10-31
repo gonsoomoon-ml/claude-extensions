@@ -21,6 +21,9 @@ lessons live in `../../deck-build/reference/korean-deck-notes.md` and apply here
   carry one to three pillar-colored terms per slide (`.p1` / `.p2`), box titles take their pillar's color and
   only the focus box doubles its border. Everything else stays white or gray, so the colored term is the
   thing the eye lands on.
+- **The strange words were found by reading, not by rendering.** The first deck's wording changed in a box-by-box
+  read (등록부 → Agent Registry, 넷 → 네 가지, 토큰 → 호출자 검증, 거름망 → 막는 곳은 유형마다 하나 …) after the
+  slides already rendered clean. The rules are in SKILL.md, "Korean wording"; do that read before the first capture.
 - **Fullscreen hides the controls row.** Every control needs a key: N notes, F fullscreen, E language.
 - **og:image must be absolute.** The preview card ignores a relative `cover.png`; the deploy script rewrites it to
   `https://<distribution>/cover.png` on every run, so the source file keeps the relative path.

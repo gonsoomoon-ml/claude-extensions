@@ -44,6 +44,21 @@ pptx twin built from the same coordinates.
 - **No chrome**: no page numbers, no logo, no footer. The rail (문제 · 접근 · 해법 · 적용, current step in coral)
   is the only furniture.
 
+## Korean wording — rules from the first deck's text review
+
+The render check finds overflow; it does not find a strange word. Read every slide's words box by box before
+the first capture, and apply these (each one replaced a word a reader stumbled on):
+
+- **Box names are the concept diagram's names.** Coin nothing: no 카탈로그 or 관문 when the diagram says
+  Agent Registry and 도구 게이트웨이. A product name stays as the diagram writes it (Agent Registry, not 등록부).
+- **Say the names, not the frame.** No 기둥 · 축 · 트랙 on a slide — the two names themselves carry the structure.
+- **Plain words over jargon and transliteration.** 토큰 → 호출자 검증 / 로그인 정보 · CI → 올리면 자동 보안 검사 ·
+  넷 → 네 가지 · 길 → 절차 / 경로 · 퍼짐 → 공유. Only product and protocol names stay in English.
+- **Say the effect, not the actor.** "IT 가 넣어 둠" → "직원은 못 고침 / 미리 들어 있음".
+- **One enforcement point per type, not layers.** 두 겹 · 1차/2차 · 거름망 → 막는 곳은 유형마다 하나.
+- **No literal or awkward phrases.** Read each line aloud in 합니다체; "한 문으로" kinds of phrases go.
+- **Count with 가지, and keep measured numbers off the slide** — they go to the notes with their source.
+
 ## English side
 
 One file, two languages. The key is the Korean `innerHTML` of each leaf element (whitespace-normalized); the
