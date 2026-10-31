@@ -11,7 +11,7 @@
     {
       "name": "deck-design",
       "source": "./plugins/deck-design",
-      "description": "Build slide decks that survive critic review: deck-mindset (design rules and template profiles), deck-build (tokens, build patterns, validate → render → inspect QA loop) and deck-agent-team (Phase-2 review via parallel critic agents with a PASS/FAIL gate)."
+      "description": "Build slide decks that survive critic review: deck-mindset (design rules and template profiles), deck-build (tokens, build patterns, validate → render → inspect QA loop) and deck-agent-team (Phase-2 review via parallel critic agents with a PASS/FAIL gate) and deck-web (one-file HTML deck with click builds, notes, 한|EN toggle, capture QA and S3 + CloudFront publish)."
     },
     {
       "name": "concise-response",

@@ -1,11 +1,12 @@
 # deck-design plugin
 
-Three complementary skills for building slide decks that survive critic review:
+Four complementary skills for building slide decks that survive critic review:
 
 | Skill | Type | Purpose |
 |---|---|---|
 | **[deck-mindset](skills/deck-mindset/SKILL.md)** | Static rules | The vocabulary, hierarchy, and layouts. *What* a good slide is. |
 | **[deck-build](skills/deck-build/SKILL.md)** | Build tools | Style tokens, pptxgenjs patterns, QA loop. *How* to produce the file. |
+| **[deck-web](skills/deck-web/SKILL.md)** | Build tools | One-file HTML deck — click builds, notes, 한\|EN toggle — with capture QA and S3 + CloudFront publish. *How* to ship the deck as a link. |
 | **[deck-agent-team](skills/deck-agent-team/SKILL.md)** | Execution tools | Parallel critic agents + orchestrator. *How* to verify a deck against the rules. |
 
 You can use them **independently or together**. They share design intent but have no hard runtime dependency.
@@ -23,6 +24,7 @@ You can use them **independently or together**. They share design intent but hav
 | Auditing rules manually (no automation) | **deck-mindset** (squint test, hierarchy check, color-cap audit) |
 | Reviewing a deck programmatically before ship | **deck-agent-team** (run `orchestrator.py`, dispatch critics, gate check) |
 | Inheriting an undocumented deck | **both** (mindset to learn what to look for, agent-team to surface violations) |
+| The deck must be a link (LinkedIn post, a page to send), or needs an English toggle | **deck-web** (template → capture → cover → English → deploy); **deck-build** for the pptx twin from the same coordinates |
 | Building a non-pptx deck (Reveal.js / Marp / Figma) | **deck-mindset** rules apply directly; **deck-agent-team** orchestrator needs renderer adaptation |
 
 ## Origin
@@ -32,6 +34,8 @@ Born from a 31-slide module (M1 — AI Developer Reinforcement) that shipped aft
 A second deck — 53 slides on the AWS black template (2026-09) — added template profiles and the dated lessons in [skills/deck-mindset/lessons.md](skills/deck-mindset/lessons.md); see [skills/deck-mindset/examples/aurora_case_study.md](skills/deck-mindset/examples/aurora_case_study.md).
 
 The full case study lives in [skills/deck-mindset/examples/M1_case_study.md](skills/deck-mindset/examples/M1_case_study.md) — frequency data, what survived vs. didn't, and why.
+
+A third deck — 13 slides as one HTML page, Korean with an English toggle, published on CloudFront (2026-10) — added deck-web and its lessons in [skills/deck-web/reference/lessons.md](skills/deck-web/reference/lessons.md).
 
 ## Quick start
 
@@ -78,6 +82,15 @@ python3 skills/deck-agent-team/orchestrator.py --auto-mark-mechanical reports/<t
 python3 skills/deck-agent-team/orchestrator.py --apply reports/<timestamp>/report.md
 ```
 
+### Use deck-web (the deck as a link)
+
+```bash
+cp skills/deck-web/templates/deck.html web/index.html          # 1. fill the slides
+python3 skills/deck-web/scripts/capture.py web/index.html out/  # 2. render + overflow check, look at out/sNN.png
+cp out/s01.png web/cover.png                                    # 3. thumbnail = cover
+bash skills/deck-web/scripts/deploy-s3-cloudfront.sh my-deck web   # 4. public URL (first run: by hand)
+```
+
 ### Use both together (recommended for new decks)
 
 1. Read **skills/deck-mindset/SKILL.md** to understand the design vocabulary.
@@ -85,7 +98,7 @@ python3 skills/deck-agent-team/orchestrator.py --apply reports/<timestamp>/repor
 3. Run **skills/deck-agent-team/orchestrator.py** to surface violations.
 4. The critics in deck-agent-team are *grounded against* the rules in deck-mindset — they enforce the same vocabulary that deck-mindset documents.
 
-## Why three skills inside one plugin?
+## Why four skills inside one plugin?
 
 Three modes of use, but they share a strong cross-reference graph:
 
@@ -94,9 +107,10 @@ Three modes of use, but they share a strong cross-reference graph:
 | Rules-only (no Python, no automation) | deck-mindset alone |
 | Build-only (produce the .pptx from locked content) | deck-build alone |
 | Tools-only (rules embedded in your own CLAUDE.md) | deck-agent-team alone |
+| Web-only (ship the deck as a link) | deck-web alone |
 | Full cycle (rules → build → automated review) | all three, composed |
 
-Bundling them as **one plugin with three skills** keeps install simple while still letting users invoke either skill independently. The cross-reference link graph (critics → vocabulary, layouts → critics) stays unbroken because both skills ship together.
+Bundling them as **one plugin with four skills** keeps install simple while still letting users invoke either skill independently. The cross-reference link graph (critics → vocabulary, layouts → critics) stays unbroken because both skills ship together.
 
 If you only want one of them, you can copy a single `skills/<name>/` subtree into your own setup — each skill is self-contained inside its own folder.
 
@@ -143,6 +157,16 @@ plugins/deck-design/
     │   └── reference/
     │       └── korean-deck-notes.md      ← font stack, render artifacts, NFD filenames
     │
+    ├── deck-web/                         ← web deck (one HTML file)
+    │   ├── SKILL.md                      ← pipeline, the file, English side, capture checks, publish
+    │   ├── templates/deck.html           ← tokens + engine + five skeleton slides (cover · cards · diagram · steps · glossary)
+    │   ├── scripts/
+    │   │   ├── capture.py                ← per-slide PNG + overflow report + translatable-string inventory
+    │   │   ├── inject-i18n.py            ← en.json → <script id="i18n-en"> in index.html
+    │   │   └── deploy-s3-cloudfront.sh   ← private bucket + OAC + CloudFront; re-run = upload + invalidate
+    │   ├── examples/                     ← en.json for the template, two renders (Korean cards, English diagram)
+    │   └── reference/lessons.md          ← what the first web deck taught (fonts, English length, toggle placement, og:image)
+    │
     └── deck-agent-team/                  ← execution tools (Tier-2)
         ├── SKILL.md                      ← skill entry; architecture + workflow
         ├── orchestrator.py               ← render + extract + apply (no LLM)
@@ -171,6 +195,12 @@ None. Pure markdown — read and apply.
 - Node.js + `pptxgenjs` (JS path) **or** Python 3.10+ + `python-pptx` (Python path, e.g. the aurora-black profile)
 - `libreoffice` headless + `poppler-utils` (`pdftoppm`) for `scripts/qa.py`
 - Fonts for faithful QA renders: `Noto Sans CJK KR` (Latin is rendered in Noto too with `RENDER_CHECK=1`)
+
+### deck-web
+
+- `python3` + `playwright` (Chromium: `python3 -m playwright install chromium`)
+- Fonts: `Noto Sans KR` or `Noto Sans CJK KR`
+- `aws` CLI with S3 + CloudFront rights, for publishing
 
 ### deck-agent-team
 

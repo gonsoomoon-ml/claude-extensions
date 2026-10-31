@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>덱 제목 — 한 문장</title>
+<meta name="description" content="한 줄 설명 — 주제 · 대상 독자 · 기준 시점">
+<meta property="og:title" content="덱 제목 — 한 문장">
+<meta property="og:description" content="표지의 질문 한 줄">
+<meta property="og:image" content="cover.png"><!-- deploy-s3-cloudfront.sh rewrites this to the absolute URL; the preview card needs it absolute -->
+<meta name="theme-color" content="#05070D">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  /* ── Tokens: deck-design aurora-black profile, 13.333 x 7.5 in canvas drawn at 96 px/in (1280 x 720) ──
+     Color code (fixed for the whole deck): coral = pillar 1, blue = pillar 2, gray = everything else.
+     Text-size coral/blue use the lighter pair (≥ 6:1 on the ground); the *-line pair draws borders and bars. */
+  :root {
+    --bg: #05070D;          /* AWS black master ground */
+    --page: #000;           /* page around the slide */
+    --text: #EAF0FF;        /* titles, body */
+    --muted: #D6DCEA;       /* labels, sources, presenter line */
+    --line: #C9D1E3;        /* card and box borders */
+    --hair: #5B6478;        /* hairlines */
+    --surface: #141B30;     /* card fill */
+    --coral: #FF7A5C;       /* pillar 1 — text (8.1:1 on the ground) */
+    --coral-line: #F06A4D;  /* pillar 1 — borders, bars */
+    --coral-tint: #3A1A14;  /* pillar 1 — fills */
+    --blue: #4DA3FF;        /* pillar 2 — text */
+    --blue-line: #1A8CFF;   /* pillar 2 — borders, bars */
+    --blue-tint: #0F2440;   /* pillar 2 — fills */
+
+    /* Type scale (pt x 1.333): max three per slide, plus the cite line */
+    --headline: 53px;       /* 40pt statement */
+    --title: 40px;          /* 30pt */
+    --takeaway: 32px;       /* 24pt */
+    --mid: 24px;            /* 18pt */
+    --body: 20px;           /* 15pt floor */
+    --cite: 13.3px;         /* 10pt, sources only */
+
+    --pad-x: 72px;          /* 0.75in side margin → content width 1136px */
+    --pad-y: 52px;
+    --radius: 11.5px;       /* 0.12in */
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--page); color: var(--text); }
+  body {
+    font-family: "Amazon Ember", "Noto Sans KR", "Noto Sans CJK KR", "Apple SD Gothic Neo", sans-serif;
+    font-size: var(--body); line-height: 1.5; word-break: keep-all;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Stage: one 16:9 slide, scaled to the window */
+  .viewport { width: 100%; display: flex; justify-content: center; padding-top: 16px; }
+  .frame { position: relative; overflow: hidden; border-radius: 4px; }
+  .stage { position: absolute; top: 0; left: 0; width: 1280px; height: 720px; transform-origin: top left; }
+  .slide {
+    position: absolute; inset: 0; display: none; padding: var(--pad-y) var(--pad-x) 22px;
+    /* black with a soft violet glow on the right, as on the AWS black master */
+    background:
+      radial-gradient(55% 85% at 108% 62%, rgba(155, 92, 255, .20), transparent 70%),
+      radial-gradient(35% 55% at 100% 8%, rgba(77, 163, 255, .10), transparent 70%),
+      var(--bg);
+  }
+  .slide.active { display: flex; flex-direction: column; }
+
+  /* Rail: the deck's frame (문제 · 접근 · 해법 · 적용), top-right of every slide but the cover; the current step bold coral.
+     An optional chip after it names the pillar the slide belongs to. */
+  .rail { position: absolute; top: 14px; right: var(--pad-x); font-size: var(--body); color: var(--muted); line-height: 1.5; }
+  .rail b { color: var(--coral); }
+  .rail .chip { margin-left: 14px; padding-left: 14px; border-left: 1px solid var(--hair); }
+  .rail .chip.p1 { color: var(--coral); } .rail .chip.p2 { color: var(--blue); }
+
+  /* Content slides: h2 = title (24pt, one sentence fits one line beside the rail), takeaway 18pt bold, body 15pt */
+  .slide h2 { font-size: var(--takeaway); font-weight: 700; line-height: 1.35; }
+  .slide h2 .p1 { color: var(--coral); } .slide h2 .p2 { color: var(--blue); }
+  .takeaway { margin-top: 10px; font-size: var(--mid); font-weight: 700; line-height: 1.4; }
+  .takeaway .p1 { color: var(--coral); } .takeaway .p2 { color: var(--blue); }
+  .foot { margin-top: 18px; line-height: 1.5; }
+  .foot p + p { margin-top: 6px; }
+  .foot b { color: var(--text); }
+  .foot .k { color: var(--muted); }
+  .nw { white-space: nowrap; }
+
+  /* Cards: equal-width grid (n2 / n3). Inside a pillar card: question (dashed box) ▼ answer. --c = the card's color. */
+  .cards { display: grid; gap: 28px; margin-top: 30px; }
+  .cards.n2 { grid-template-columns: 1fr 1fr; }
+  .cards.n3 { grid-template-columns: repeat(3, 1fr); gap: 24px; }
+  .card {
+    background: color-mix(in srgb, var(--surface) 82%, transparent);
+    border: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+    border-top: 4px solid var(--c);
+    border-radius: var(--radius); padding: 22px 26px 24px;
+  }
+  .t-p1 { --c: var(--coral); } .t-p2 { --c: var(--blue); } .t-n { --c: var(--hair); }
+  .card .name { font-size: var(--mid); font-weight: 700; color: var(--c); line-height: 1.35; }
+  .card.t-n .name { color: var(--text); }
+  .card .lab { font-weight: 700; margin-right: 12px; }
+  .card .prob { margin-top: 14px; min-height: 108px; padding: 10px 16px; color: var(--text); line-height: 1.45;
+                border: 1px dashed color-mix(in srgb, var(--line) 50%, transparent); border-radius: 8px; }
+  .card .prob .now { color: var(--muted); }
+  .card .down { margin: 4px 0 4px 26px; color: var(--c); line-height: 1.2; }
+  .card .appr { line-height: 1.5; }
+  .card .appr .head { font-weight: 700; }
+  .card .appr .where { color: var(--muted); }
+  /* Option cards (A/B/C): a badge + name head, lines, and a verdict chip pinned to the bottom; the recommended card is t-p1 */
+  .cards.n3 .card { display: flex; flex-direction: column; }
+  .card .head { display: flex; align-items: center; gap: 12px; }
+  .card .badge { flex: none; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+                 font-size: var(--mid); font-weight: 700; color: var(--bg); background: var(--line); }
+  .card.t-p1 .badge { background: var(--coral-line); }
+  .card .lines { margin-top: 14px; line-height: 1.5; }
+  .card .lines p + p { margin-top: 10px; }
+  .card .lines .where { color: var(--muted); }
+  .card .verdict { margin-top: auto; padding-top: 16px; align-self: flex-start; font-size: var(--body); font-weight: 700; color: var(--muted); white-space: nowrap; }
+  .card .verdict::before { content: "→ "; }
+  .card.t-p1 .verdict { color: var(--coral); }
+
+  /* Bridge: a bracket from both cards down to one chip — where the two answers meet */
+  .bridge { position: relative; margin-top: 10px; height: 74px; }
+  .bridge svg { position: absolute; left: 0; top: 0; width: 1136px; height: 48px; overflow: visible; }
+  .bridge .chip { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); padding: 5px 18px; white-space: nowrap;
+                  background: var(--bg); border: 1px solid var(--line); border-radius: 999px; line-height: 1.5; }
+  .bridge .chip b { color: var(--text); }
+  .bridge .chip .lab { font-weight: 700; margin-right: 12px; }
+
+  /* Flow diagram: absolutely placed nodes on a fixed canvas (1136 wide) + one SVG of connectors underneath */
+  .diag { position: relative; width: 1136px; margin-top: 14px; }
+  .diag svg.lines { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .diag .collab { position: absolute; font-weight: 700; color: var(--muted); line-height: 1.5; }
+  .node { position: absolute; padding: 10px 14px; line-height: 1.4; border-radius: var(--radius);
+          background: color-mix(in srgb, var(--surface) 88%, transparent); border: 1.5px solid color-mix(in srgb, var(--line) 60%, transparent); }
+  .node .nm { font-weight: 700; }
+  .node.t1 .nm { color: var(--coral); }   /* title in the pillar color, border stays neutral */
+  .node.t2 .nm { color: var(--blue); }
+  .node .sub { color: var(--muted); }
+  .node.p1 { border-color: var(--coral-line); } .node.p1 .nm { color: var(--coral); }   /* border too: the pillar's own box */
+  .node.p2 { border-color: var(--blue-line); } .node.p2 .nm { color: var(--blue); }
+  .node.focus { border-width: 2.5px; }
+  .node.plain { background: transparent; border-style: dashed; }
+  .diag .lbl { position: absolute; color: var(--muted); line-height: 1.4; white-space: nowrap; }
+  .diag .lbl.p1 { color: var(--coral); }
+  .diag .lbl.p2 { color: var(--blue); font-weight: 700; }
+  /* Sub-boxes inside a node (e.g. an employee PC): absolute inside the node; .strip = the part another pillar governs */
+  .node .subbox { position: absolute; left: 12px; right: 12px; padding: 7px 10px; line-height: 1.15; border-radius: 8px; white-space: nowrap;
+                  background: color-mix(in srgb, var(--surface) 95%, transparent); border: 1px solid color-mix(in srgb, var(--line) 55%, transparent); }
+  .node .subbox b { color: var(--blue); }
+  .node .subbox.strip { border: 1.5px dashed var(--coral-line); background: transparent; }
+  .node .subbox.strip b { color: var(--coral); }
+
+  /* Step grid: 3 step columns × row labels, shapes not a table; column colors gray · coral · blue */
+  .steps { display: grid; grid-template-columns: 104px repeat(3, 1fr); gap: 12px 20px; margin-top: 22px; align-items: stretch; }
+  .steps .sh { font-size: var(--mid); font-weight: 700; line-height: 1.35; padding-bottom: 4px; }
+  .steps .sh.c1 { color: var(--muted); } .steps .sh.c2 { color: var(--coral); } .steps .sh.c3 { color: var(--blue); }
+  .steps .sh .arr { float: right; color: var(--hair); font-weight: 400; }
+  .steps .rl { font-weight: 700; color: var(--muted); align-self: center; }
+  .steps .cell { padding: 14px 18px; line-height: 1.5; border-radius: var(--radius);
+                 background: color-mix(in srgb, var(--surface) 82%, transparent); border: 1.5px solid color-mix(in srgb, var(--line) 55%, transparent); }
+  .steps .cell.c2 { border: 2.5px solid var(--coral-line); }
+  .steps .cell.c3 { border-color: color-mix(in srgb, var(--blue-line) 70%, transparent); }
+  .steps .cell .sub { color: var(--muted); }
+
+  /* Glossary (appendix): shape rows, alternating faint fill; concept name bold (pillar color), product name muted */
+  .gloss { margin-top: 14px; }
+  .gloss .r { display: grid; grid-template-columns: 180px 300px 1fr; column-gap: 16px; padding: 2px 14px; line-height: 1.4; border-radius: 6px; }
+  .gloss .r:nth-child(even) { background: color-mix(in srgb, var(--surface) 70%, transparent); }
+  .gloss .r.h { font-weight: 700; color: var(--muted); border-bottom: 1px solid var(--hair); border-radius: 0; margin-bottom: 4px; }
+  .gloss .r .c { font-weight: 700; }
+  .gloss .r .c.p1 { color: var(--coral); } .gloss .r .c.p2 { color: var(--blue); }
+  .gloss .r .s { color: var(--muted); }
+  .defs { margin-top: 10px; color: var(--muted); line-height: 1.45; }
+  .defs b { color: var(--text); }
+
+  /* Figure slide: an image with translucent overlays that build on click (.ov.p1 coral, .ov.p2 blue), then a key and a legend */
+  .fig { position: relative; margin: 10px auto 0; width: 980px; }
+  .fig img { display: block; width: 100%; height: auto; border-radius: 6px; }
+  .ov { position: absolute; border-radius: 8px; border: 2px solid var(--c); background: color-mix(in srgb, var(--c) 16%, transparent); }
+  .ov .tag { position: absolute; left: 8px; top: -15px; padding: 0 12px; font-size: var(--body); font-weight: 700; line-height: 1.5; white-space: nowrap;
+             color: var(--ct); background: #FBF9F6; border: 1.5px solid var(--c); border-radius: 999px; }
+  .ov.p1 { --c: var(--coral-line); --ct: #D63C1C; } .ov.p2 { --c: var(--blue-line); --ct: #0972D3; }
+  .key { margin-top: 10px; display: flex; gap: 36px; font-weight: 700; line-height: 1.45; }
+  .key .p1 { color: var(--coral); } .key .p2 { color: var(--blue); }
+  .legend { margin-top: 4px; color: var(--muted); line-height: 1.45; }
+  .legend b { color: var(--text); }
+
+  /* Build steps: an element with data-step="n" shows once the slide's step reaches n (→ key or click) */
+  [data-step] { visibility: hidden; }
+  [data-step].on { visibility: visible; }
+
+  /* Cover: one question, three lines; the thumbnail reads the three lines only */
+  .cover { justify-content: space-between; }
+  .cover .series { font-size: var(--body); color: var(--muted); }
+  .cover .q { margin: auto 0; }
+  .cover h1 { font-size: var(--title); font-weight: 700; line-height: 1.32; }
+  .cover h1 .c1 { color: var(--coral); }
+  .cover h1 .c2 { color: var(--blue); }
+  .cover .sub { margin-top: 28px; font-size: var(--mid); color: var(--muted); }
+  .cover .presenter { font-size: var(--body); color: var(--muted); }
+
+  /* Controls and the reading area under the slide (hidden in fullscreen — every toggle also has a key) */
+  .below { max-width: 1280px; margin: 0 auto; padding: 12px 16px 48px; }
+  .controls { display: flex; align-items: center; gap: 12px; font-size: 14px; color: var(--muted); }
+  .controls button {
+    font: inherit; color: var(--text); background: transparent;
+    border: 1px solid var(--hair); border-radius: 6px; padding: 6px 14px; cursor: pointer;
+  }
+  .controls button:hover, .controls button[aria-pressed="true"] { border-color: var(--line); }
+  .controls .count { margin-left: auto; }
+  .panel { margin-top: 20px; border-top: 1px solid var(--hair); padding-top: 16px; }
+  .panel h2 { font-size: 16px; font-weight: 700; color: var(--muted); margin-bottom: 8px; }
+  .panel li { font-size: 15px; color: var(--muted); margin: 4px 0 4px 20px; }
+  .panel a { color: var(--text); word-break: break-all; }
+  .refs { list-style: none; }
+  .refs li { margin-left: 0; }
+  .refs-wrap.none { display: none; }
+  .notes { display: none; }
+  body.show-notes .notes { display: block; }
+  body.fs { background: #000; }
+  body.fs .below { display: none; }
+  body.fs .viewport { padding-top: 0; height: 100vh; align-items: center; }
+
+  /* Language toggle 한 | EN: a control button beside ← 이전 / 다음 → (E key, ?lang=en). Hidden when the deck has no English map. */
+  .controls .lang { color: var(--muted); padding: 6px 10px; }
+  .lang span { padding: 0 5px; }
+  .lang .sep { padding: 0; color: var(--hair); }
+  .lang .cur { color: var(--text); font-weight: 700; }
+  /* English runs 10–20% longer than Korean: one size down (never below 18px) on the dense blocks, a wider glossary name column.
+     Korean rendering is untouched by these rules. */
+  html[lang=en] .cover h1 { font-size: 36px; }
+  html[lang=en] .takeaway { font-size: 22px; }
+  html[lang=en] .key, html[lang=en] .legend, html[lang=en] .foot { font-size: 18px; }
+  html[lang=en] .card .lines, html[lang=en] .card .verdict { font-size: 18px; }
+  html[lang=en] .node, html[lang=en] .node .subbox, html[lang=en] .diag .lbl, html[lang=en] .diag .collab { font-size: 18px; }
+  html[lang=en] .steps .sh { font-size: 20px; }
+  html[lang=en] .steps .cell, html[lang=en] .steps .rl { font-size: 18px; }
+  html[lang=en] .gloss .r { grid-template-columns: 200px 290px 1fr; font-size: 18px; }
+  html[lang=en] .defs { font-size: 18px; }
+</style>
+</head>
+<body>
+<!-- Arrowheads for every diagram: neutral (ah), pillar 1 (ah-c), pillar 2 (ah-b). SVG attributes cannot read var(), so the hex repeats here. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#C9D1E3"/></marker>
+    <marker id="ah-c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#F06A4D"/></marker>
+    <marker id="ah-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#1A8CFF"/></marker>
+  </defs>
+</svg>
+<div class="viewport"><div class="frame" id="frame"><div class="stage" id="stage">
+  <!-- 0 · Cover: one question in three lines (= the problem). cover.png is a 1280×720 capture of this slide. -->
+  <section class="slide cover" data-title="표지">
+    <p class="series">기둥 1 이름 · 기둥 2 이름</p>
+    <div class="q">
+      <h1><span class="c1">질문의 첫 줄은 기둥 1 의 색으로 쓰고,</span><br>
+          <span class="c2">둘째·셋째 줄은 기둥 2 의 색으로<br>세 줄 안에 질문을 끝냅니다?</span></h1>
+      <p class="sub">누구의 질문인지 한 줄 — 대상 독자를 적습니다.</p>
+    </div>
+    <p class="presenter">이름 (Name) · 소속 · 직함 · 2026-11-01</p>
+    <template class="notes-src"><li>발표자 노트는 장마다 이 template 안에 li 로 적습니다. N 키 또는 「노트」 단추로 슬라이드 아래에 보입니다.</li><li>표지의 질문이 곧 문제입니다. 길잡이 줄 "문제 · 접근 · 해법 · 적용"의 문제 = 이 장.</li></template>
+  </section>
+
+  <!-- 1 · Answer: two pillar cards (question ▼ answer) and a bridge chip where they meet. Clicks: card 1 → card 2 → bridge. -->
+  <section class="slide" data-title="답: 두 기둥">
+    <p class="rail">문제 · <b>접근</b> · 해법 · 적용</p>
+    <h2>답: <span class="p1">기둥 1 의 답 한 토막</span>, <span class="p2">기둥 2 의 답 한 토막</span></h2>
+    <p class="takeaway">결론 한 줄 — 핵심어만 <span class="p1">기둥 1 색</span>, <span class="p2">기둥 2 색</span>으로 칠합니다.</p>
+    <div class="cards n2">
+      <div class="card t-p1" data-step="1">
+        <div class="name">기둥 1 이름</div>
+        <div class="prob"><span class="lab">질문</span>기둥 1 의 질문을 표지 문장 그대로<br><span class="now">지금은 어떤 상태인지 한 줄</span></div>
+        <div class="down">▼</div>
+        <div class="appr"><span class="lab">답</span><span class="head">접근 한 줄: 정하는 곳은 하나</span><br>
+          둘째 줄 — 어디에서 <span class="where">— <span class="nw">상자 이름</span> · <span class="nw">상자 이름</span> · <span class="nw">상자 이름</span></span><br>
+          셋째 줄 — 무엇이 달라지나</div>
+      </div>
+      <div class="card t-p2" data-step="2">
+        <div class="name">기둥 2 이름</div>
+        <div class="prob"><span class="lab">질문</span>기둥 2 의 질문을 표지 문장 그대로<br><span class="now">지금은 어떤 상태인지 한 줄</span></div>
+        <div class="down">▼</div>
+        <div class="appr"><span class="lab">답</span><span class="head">접근 한 줄: 모으는 곳은 하나</span><br>
+          누구나 만들고 → 승인되면 → 모두가 씀<br>
+          셋째 줄 <span class="where">— <span class="nw">상자 이름</span> · <span class="nw">상자 이름</span></span></div>
+      </div>
+    </div>
+    <div class="bridge" data-step="3">
+      <svg viewBox="0 0 1136 48" aria-hidden="true"><path d="M277 0 V24 H859 V0" fill="none" style="stroke: var(--hair)" stroke-width="2"/></svg>
+      <span class="chip"><span class="lab">두 답이 만나는 곳</span>두 기둥을 잇는 한 문장 — 무엇이 무엇을 읽는가</span>
+    </div>
+    <template class="notes-src"><li>카드 둘은 같은 모양: 질문(점선 상자) ▼ 답. 상자 이름은 개념도의 이름 그대로 쓰고 새 말을 만들지 않습니다.</li></template>
+  </section>
+
+  <!-- 2 · Flow diagram: nodes at absolute coordinates on a 1136-wide canvas, connectors in one SVG, labels above columns. Clicks follow the flow. -->
+  <section class="slide" data-title="흐름 도식">
+    <p class="rail">문제 · 접근 · <b>해법</b> · 적용<span class="chip p2">기둥 2 이름</span></p>
+    <h2>흐름 도식: 상자는 절대 좌표, 선은 SVG 한 장</h2>
+    <p class="takeaway">결론 한 줄. <b>굵게</b>는 장당 한두 곳, 기둥 색은 상자 제목에만.</p>
+    <div class="diag" style="height: 470px">
+      <svg class="lines" viewBox="0 0 1136 470" aria-hidden="true">
+        <g data-step="2" fill="none" stroke="#C9D1E3" stroke-width="2"><path d="M220 152 H280" marker-end="url(#ah)"/></g>
+        <g data-step="3" fill="none" stroke="#C9D1E3" stroke-width="2"><path d="M500 152 H560" marker-end="url(#ah)"/><path d="M780 152 H840" marker-end="url(#ah)"/></g>
+        <g data-step="4" fill="none" stroke="#F06A4D" stroke-width="2" stroke-dasharray="7 5"><path d="M670 300 V204" marker-end="url(#ah-c)"/></g>
+      </svg>
+      <span class="collab" style="left:0; top:0">(1) 단계 이름</span>
+      <span class="collab" style="left:280px; top:0">(2) 단계 이름</span>
+      <span class="collab" style="left:560px; top:0">(3) 단계 이름</span>
+      <span class="collab" style="left:840px; top:0">직원 PC</span>
+
+      <div class="node t2" data-step="1" style="left:0; top:100px; width:220px; height:104px">
+        <div class="nm">상자 이름</div>
+        <div>하는 일 한 줄</div>
+        <div class="sub">보조 설명</div>
+      </div>
+      <div class="node p2 focus" data-step="2" style="left:280px; top:100px; width:220px; height:104px">
+        <div class="nm">초점 상자</div>
+        <div><b>굵은 토막</b> — 설명</div>
+      </div>
+      <div class="node p2" data-step="3" style="left:560px; top:100px; width:220px; height:104px">
+        <div class="nm">상자 이름</div>
+        <div>하는 일 한 줄</div>
+      </div>
+      <div class="node plain t2" data-step="3" style="left:840px; top:40px; width:296px; height:232px">
+        <div class="subbox strip" style="top:12px; height:62px"><b>점선 띠</b><br><span class="sub">다른 기둥이 정하는 칸</span></div>
+        <div class="subbox" style="top:94px; height:62px"><b>안쪽 상자</b><br><span class="sub">보조 설명</span></div>
+        <div class="subbox" style="top:156px; height:62px"><b>안쪽 상자</b><br><span class="sub">보조 설명</span></div>
+      </div>
+      <div class="node p1" data-step="4" style="left:560px; top:300px; width:220px; height:108px">
+        <div class="nm">기둥 1 상자</div>
+        <div>되돌아오는 선은<br>점선 + 기둥 1 색</div>
+      </div>
+      <span class="lbl p1" data-step="4" style="left:690px; top:232px">선 옆 라벨</span>
+      <span class="lbl" data-step="5" style="left:0; top:420px; white-space:normal; width:520px; line-height:1.45; color: var(--text)">마지막 클릭에 나오는 맺음 두 줄.<br>도식 아래 왼쪽, 본문 색으로.</span>
+    </div>
+    <template class="notes-src"><li>좌표는 1280×720 캔버스 기준 px 입니다. 같은 좌표를 pptx 빌드(deck-build)에 그대로 쓸 수 있습니다.</li></template>
+  </section>
+
+  <!-- 3 · Step grid: 3 steps × (what you add / what you get), shapes not a table; a closing line on the last click. -->
+  <section class="slide" data-title="도입 순서: 세 단계">
+    <p class="rail">문제 · 접근 · 해법 · <b>적용</b></p>
+    <h2>도입 순서: 세 단계</h2>
+    <p class="takeaway">1단계 → 2단계 → 3단계. <b>세 단계</b>면 됩니다. 이미 1단계가 있으면 <span class="p1">2단계부터</span>.</p>
+    <div class="steps">
+      <div></div>
+      <div class="sh c1" data-step="1">1단계 · 이름<span class="arr">▶</span></div>
+      <div class="sh c2" data-step="2">2단계 · 이름<span class="arr">▶</span></div>
+      <div class="sh c3" data-step="3">3단계 · 이름</div>
+      <div class="rl">더하는 것</div>
+      <div class="cell c1" data-step="1">항목<br>항목<br>항목</div>
+      <div class="cell c2" data-step="2">항목<br><span class="sub">보조 설명 한 줄</span></div>
+      <div class="cell c3" data-step="3">항목<br>항목 + 항목<br>항목</div>
+      <div class="rl">얻는 것</div>
+      <div class="cell c1" data-step="1">얻는 것<br>얻는 것<br>얻는 것</div>
+      <div class="cell c2" data-step="2">얻는 것 · 얻는 것<br>한 번 바꾸면 어디까지 전달<br>얻는 것</div>
+      <div class="cell c3" data-step="3">얻는 것 한 줄<br>얻는 것</div>
+    </div>
+    <div class="foot" data-step="4">
+      <p><b>맺음 굵게</b> — 순서가 그런 이유 한 줄.</p>
+      <p><span class="k">둘째 줄은 흐리게 — 근거나 조건</span></p>
+    </div>
+    <template class="notes-src"><li>표가 아니라 도형 격자입니다. pptx 로 옮길 때 칸마다 따로 애니메이션을 걸 수 있습니다.</li></template>
+    <template class="refs-src"><li>1. 출처 제목 — https://example.com/source (각주는 이 template 에, 슬라이드 아래 「각주」 칸에 보입니다)</li></template>
+  </section>
+
+  <!-- 4 · Appendix glossary: rows as shapes; concept name (pillar color) · product name (muted) · what it does; abbreviations below. -->
+  <section class="slide" data-title="부록 · 용어 한 장">
+    <p class="rail">문제 · 접근 · 해법 · 적용<span class="chip">부록</span></p>
+    <h2>부록 · 용어 한 장: 그림의 상자와 제품</h2>
+    <p class="takeaway">왼쪽은 개념 이름, 가운데는 제품 이름 — 둘은 1:1 입니다. 제품은 바꿔 끼울 수 있습니다.</p>
+    <div class="gloss">
+      <div class="r h"><span>개념 이름</span><span>제품 이름</span><span>하는 일</span></div>
+      <div class="r"><span class="c">중립 상자</span><span class="s">Product name</span><span>하는 일 한 줄</span></div>
+      <div class="r"><span class="c p1">기둥 1 상자</span><span class="s">Product name</span><span>하는 일 한 줄</span></div>
+      <div class="r"><span class="c p2">기둥 2 상자</span><span class="s">Product name (vendor)</span><span>하는 일 한 줄</span></div>
+      <div class="r"><span class="c">중립 상자</span><span class="s">Product name</span><span>하는 일 한 줄</span></div>
+      <div class="r"><span class="c p2">기둥 2 상자</span><span class="s">Product name</span><span>하는 일 한 줄</span></div>
+      <div class="r"><span class="c">중립 상자</span><span class="s">Product name</span><span>하는 일 한 줄</span></div>
+    </div>
+    <p class="defs"><b>줄임말</b> = 풀이 · <b>줄임말</b> = 풀이<br><b>줄임말</b> = 풀이 · <b>줄임말</b> = 풀이</p>
+    <template class="notes-src"><li>용어 장은 마지막에 둡니다. 본문에서 새 말을 만들지 않았다면 이 장은 짧습니다.</li></template>
+  </section>
+</div></div></div>
+
+<div class="below">
+  <div class="controls">
+    <button id="prev" aria-label="이전 슬라이드">← 이전</button>
+    <button id="next" aria-label="다음 슬라이드">다음 →</button>
+    <button id="lang" class="lang" type="button" title="언어 · Language (E)"><span class="l-ko cur">한</span><span class="sep">|</span><span class="l-en">EN</span></button>
+    <button id="toggle-notes" aria-pressed="false">노트 (N)</button>
+    <button id="fullscreen">전체 화면 (F)</button>
+    <span class="count" id="count"></span>
+  </div>
+  <div class="panel refs-wrap none" id="refs-wrap">
+    <h2>각주</h2>
+    <ol class="refs" id="refs"></ol>
+  </div>
+  <div class="panel notes">
+    <h2>발표자 노트</h2>
+    <ul id="notes"></ul>
+  </div>
+</div>
+
+<!-- English map: {"text": {"<Korean innerHTML, whitespace-normalized>": "<English innerHTML>", ...}}.
+     Filled by scripts/inject-i18n.py from en.json; empty = no English, the 한|EN button hides itself. -->
+<script id="i18n-en" type="application/json">{"text":{}}</script>
+
+<script>
+(function () {
+  var W = 1280, H = 720;
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var stage = document.getElementById('stage'), frame = document.getElementById('frame');
+  var i = 0, step = 0, lang = 'ko';
+  function $(id) { return document.getElementById(id); }
+
+  /* ── Stage: scale the 1280×720 canvas to the window (×4 at most in fullscreen, ×1 otherwise) ── */
+  function fit() {
+    var fs = document.body.classList.contains('fs');
+    var s = Math.min(window.innerWidth / W, (window.innerHeight - (fs ? 0 : 90)) / H, fs ? 4 : 1);
+    s = Math.max(s, 0.25);
+    stage.style.transform = 'scale(' + s + ')';
+    frame.style.width = (W * s) + 'px';
+    frame.style.height = (H * s) + 'px';
+  }
+
+  /* ── Slides and click builds: data-step="n" shows at step n; hash #slide.step ── */
+  function maxStep(s) {
+    var m = 0; s.querySelectorAll('[data-step]').forEach(function (el) { m = Math.max(m, parseInt(el.dataset.step, 10) || 0); }); return m;
+  }
+  function applyStep() {
+    slides[i].querySelectorAll('[data-step]').forEach(function (el) { el.classList.toggle('on', (parseInt(el.dataset.step, 10) || 0) <= step); });
+  }
+  function next() { if (step < maxStep(slides[i])) { step++; applyStep(); } else show(i + 1); }
+  function prev() { if (step > 0) { step--; applyStep(); } else show(i - 1, 99); }
+  function show(n, st) {
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    step = Math.max(0, Math.min(maxStep(slides[i]), st || 0)); applyStep();
+    slides.forEach(function (s, k) { s.classList.toggle('active', k === i); });
+    renderAside();
+    if (location.hash !== '#' + (i + 1)) history.replaceState(null, '', '#' + (i + 1));
+  }
+  function renderAside() {
+    var s = slides[i], tpl = s.querySelector('template.notes-src'), rtpl = s.querySelector('template.refs-src');
+    $('notes').innerHTML = tpl ? tpl.innerHTML.trim() : '';
+    $('refs').innerHTML = rtpl ? rtpl.innerHTML.trim() : '';
+    $('refs-wrap').classList.toggle('none', !rtpl);
+    $('count').textContent = (i + 1) + ' / ' + slides.length + ' · ' + tr(s.dataset.title || '');
+  }
+
+  /* ── Language: Korean ⇄ English. The map's key is the Korean innerHTML of a leaf element (whitespace-normalized);
+     text is swapped in place on every leaf (notes templates included), plus <title>, img alt, aria-label and data-title.
+     Layout, steps and keys stay the same. URL ?lang=en wins over the remembered choice. ── */
+  var I18N = { text: {} };
+  try { var blk = $('i18n-en'); if (blk) I18N = JSON.parse(blk.textContent || '{}'); } catch (e) {}
+  if (!I18N.text) I18N.text = {};
+  var hasEn = Object.keys(I18N.text).length > 0;
+  var INLINE = { SPAN: 1, B: 1, BR: 1, A: 1, I: 1, EM: 1, STRONG: 1, SUP: 1, SUB: 1 };
+  function norm(h) { return h.replace(/\s+/g, ' ').trim(); }
+  function tr(ko) { return lang === 'en' ? (I18N.text[norm(ko)] || ko) : ko; }
+  var leaves = [], attrs = [];
+  function collect(root, si) {
+    if (!root || root.id === 'notes' || root.id === 'refs' || root.id === 'lang') return;
+    if (root.tagName === 'TEMPLATE') { collect(root.content, si); return; }
+    var kids = root.children || [], all = true, k;
+    for (k = 0; k < kids.length; k++) if (!INLINE[kids[k].tagName]) { all = false; break; }
+    if (all && (root.textContent || '').trim()) { leaves.push({ el: root, ko: root.innerHTML, slide: si }); return; }
+    for (k = 0; k < kids.length; k++) collect(kids[k], si);
+  }
+  slides.forEach(collect); collect(document.querySelector('.below'), -1);
+  attrs.push({ ko: document.title, tag: 'title', slide: -1, set: function (v) { document.title = v; } });
+  document.querySelectorAll('.slide img[alt], .slide [aria-label], .below [aria-label]').forEach(function (el) {
+    var a = el.hasAttribute('alt') ? 'alt' : 'aria-label', si = slides.indexOf(el.closest('.slide'));
+    attrs.push({ ko: el.getAttribute(a), tag: el.tagName + '[' + a + ']', slide: si, set: function (v) { el.setAttribute(a, v); } });
+  });
+  function setLang(l) {
+    lang = (l === 'en' && hasEn) ? 'en' : 'ko';
+    var en = lang === 'en';
+    leaves.forEach(function (x) { x.el.innerHTML = en ? (I18N.text[norm(x.ko)] || x.ko) : x.ko; });
+    attrs.forEach(function (a) { a.set(en ? (I18N.text[norm(a.ko)] || a.ko) : a.ko); });
+    document.documentElement.lang = lang;
+    var b = $('lang');
+    if (b) { b.querySelector('.l-ko').classList.toggle('cur', !en); b.querySelector('.l-en').classList.toggle('cur', en); }
+    applyStep(); renderAside();
+    try { localStorage.setItem('deck-lang', lang); } catch (e) {}
+    history.replaceState(null, '', location.pathname + (en ? '?lang=en' : '') + location.hash);
+  }
+  function toggleLang() { if (hasEn) setLang(lang === 'en' ? 'ko' : 'en'); }
+  var langBtn = $('lang');
+  if (langBtn) { if (hasEn) langBtn.onclick = toggleLang; else langBtn.style.display = 'none'; }
+
+  /* ── Notes, fullscreen, keys ── */
+  function toggleNotes() {
+    var on = document.body.classList.toggle('show-notes');
+    $('toggle-notes').setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+  function toggleFs() {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+  }
+  $('prev').onclick = prev;
+  $('next').onclick = next;
+  $('toggle-notes').onclick = toggleNotes;
+  $('fullscreen').onclick = toggleFs;
+  document.addEventListener('fullscreenchange', function () {
+    document.body.classList.toggle('fs', !!document.fullscreenElement);
+    fit();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    if (['ArrowRight', 'PageDown', ' '].indexOf(e.key) >= 0) { e.preventDefault(); next(); }
+    else if (['ArrowLeft', 'PageUp'].indexOf(e.key) >= 0) { e.preventDefault(); prev(); }
+    else if (e.key === 'Home') show(0);
+    else if (e.key === 'End') show(slides.length - 1);
+    else if (e.key === 'n' || e.key === 'N') toggleNotes();
+    else if (e.key === 'f' || e.key === 'F') toggleFs();
+    else if (e.key === 'e' || e.key === 'E') toggleLang();
+  });
+  window.addEventListener('resize', fit);
+  function fromHash() { var p = location.hash.slice(1).split('.'); show((parseInt(p[0], 10) || 1) - 1, parseInt(p[1], 10) || 0); }
+  window.addEventListener('hashchange', fromHash);
+
+  /* ── For tools (capture.py): every translatable string with its slide index, and the controls ── */
+  window.deck = {
+    show: show, setLang: setLang,
+    keys: function () {
+      var out = leaves.map(function (x) { return { slide: x.slide, tag: x.el.tagName, cls: String(x.el.className || ''), key: norm(x.ko) }; });
+      attrs.forEach(function (a) { out.push({ slide: a.slide, tag: a.tag, cls: '', key: norm(a.ko) }); });
+      slides.forEach(function (s, k) { if (s.dataset.title) out.push({ slide: k, tag: 'data-title', cls: '', key: norm(s.dataset.title) }); });
+      return out;
+    }
+  };
+
+  fit();
+  fromHash();
+  var want = new URLSearchParams(location.search).get('lang'), saved = null;
+  try { saved = localStorage.getItem('deck-lang'); } catch (e) {}
+  if ((want || saved) === 'en') setLang('en');
+})();
+</script>
+</body>
+</html>
