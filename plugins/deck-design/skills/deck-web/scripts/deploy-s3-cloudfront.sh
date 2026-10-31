@@ -17,7 +17,7 @@ ACC=$(aws sts get-caller-identity --query Account --output text)
 B="$NAME-$ACC"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 
-if ! aws s3api head-bucket --bucket "$B" 2>/dev/null; then
+if ! aws s3api head-bucket --bucket "$B" >/dev/null 2>&1; then
   echo "creating bucket $B ($REGION)"
   if [ "$REGION" = "us-east-1" ]; then aws s3api create-bucket --bucket "$B" --region "$REGION" --output text --query Location
   else aws s3api create-bucket --bucket "$B" --region "$REGION" --create-bucket-configuration LocationConstraint="$REGION" --output text --query Location; fi
