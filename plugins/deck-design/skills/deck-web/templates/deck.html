@@ -206,6 +206,7 @@
     border: 1px solid var(--hair); border-radius: 6px; padding: 6px 14px; cursor: pointer;
   }
   .controls button:hover, .controls button[aria-pressed="true"] { border-color: var(--line); }
+  .controls button[aria-disabled="true"] { opacity: .35; }
   .controls .count { margin-left: auto; }
   .panel { margin-top: 20px; border-top: 1px solid var(--hair); padding-top: 16px; }
   .panel h2 { font-size: 16px; font-weight: 700; color: var(--muted); margin-bottom: 8px; }
@@ -427,9 +428,15 @@
   }
   function applyStep() {
     slides[i].querySelectorAll('[data-step]').forEach(function (el) { el.classList.toggle('on', (parseInt(el.dataset.step, 10) || 0) <= step); });
+    updateNav();
   }
-  function next() { if (step < maxStep(slides[i])) { step++; applyStep(); } else show(i + 1); }
-  function prev() { if (step > 0) { step--; applyStep(); } else show(i - 1, 99); }
+  function updateNav() {   // 처음·끝에서 단추를 흐리게 (동작은 next/prev 가 이미 멈춤)
+    var atStart = i === 0 && step === 0, atEnd = i === slides.length - 1 && step >= maxStep(slides[i]);
+    document.getElementById('prev').setAttribute('aria-disabled', atStart ? 'true' : 'false');
+    document.getElementById('next').setAttribute('aria-disabled', atEnd ? 'true' : 'false');
+  }
+  function next() { if (step < maxStep(slides[i])) { step++; applyStep(); } else if (i < slides.length - 1) show(i + 1); }   // 끝 장의 마지막 단계에서는 멈춤
+  function prev() { if (step > 0) { step--; applyStep(); } else if (i > 0) show(i - 1, 99); }   // 첫 장의 0단계에서는 멈춤
   function show(n, st) {
     i = Math.max(0, Math.min(slides.length - 1, n));
     step = Math.max(0, Math.min(maxStep(slides[i]), st || 0)); applyStep();
