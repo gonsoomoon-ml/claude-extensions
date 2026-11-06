@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>scheme D: two definition panels + one framework mapped onto the other</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="base.css">
+<style>
+  /* scheme-local layout only. Colors and type sizes come from tokens.css.
+     Taken from the image of the Deep Insight x Anthropic "new rules of context engineering" post (2026-11). */
+  .context { font-size: var(--fs-body); line-height: 1.45; }
+  .panels { display: flex; gap: 20px; }
+  .panel { flex: 1; display: flex; flex-direction: column; padding: 18px 16px 18px; min-height: 404px; }
+  .p-title { font-size: var(--fs-panel-title); font-weight: 700; line-height: 1.2; }
+  .p-gist { font-size: var(--fs-label); color: var(--ink-2); line-height: 1.4; margin-top: 6px; }
+  .rules { display: flex; flex-direction: column; justify-content: space-between; flex: 1; margin-top: 12px; }
+  .r-head, .r-row { display: grid; grid-template-columns: 28px 180px 26px 1fr; align-items: baseline; }
+  .r-head { font-size: var(--fs-small); font-weight: 700; color: var(--ink-2); }
+  .r-row { font-size: var(--fs-label); line-height: 1.35; }
+  .r-row .n { font-weight: 700; color: var(--ink-2); }
+  .r-row .a { color: var(--ink-2); }
+  .r-row .ar { text-align: center; font-weight: 700; color: var(--ink-2); }
+  .r-row .b { font-weight: 700; }
+  .layers { display: flex; flex-direction: column; justify-content: space-between; flex: 1; margin-top: 12px; }
+  .l-name { font-size: var(--fs-body); font-weight: 700; line-height: 1.25; }
+  .l-name .term { font-size: var(--fs-source); font-weight: 400; color: var(--ink-2); }
+  .l-desc { font-size: var(--fs-label); line-height: 1.35; margin-top: 2px; }
+  .q { font-size: var(--fs-section); font-weight: 700; line-height: 1.25; }
+  .answer { font-size: var(--fs-context); font-weight: 700; line-height: 1.3; background: var(--accent-fill); border: 2px solid var(--accent); border-radius: 12px; padding: 6px 18px; margin-top: 8px; }
+  .answer b { color: var(--accent); }
+  .note { font-size: var(--fs-small); color: var(--ink-2); text-align: right; margin: 8px 0 6px; }
+  .card { padding: 14px 22px; }
+  .card .num { font-size: var(--fs-takeaway); font-weight: 700; line-height: 1.15; letter-spacing: -0.01em; margin-top: 6px; }
+  .card .card-sub.after { margin-top: 6px; font-size: var(--fs-small); line-height: 1.4; }
+  .sub-takeaway { margin-top: 4px; }
+  .sub-takeaway .cta-note { font-weight: 400; color: var(--ink-2); font-size: var(--fs-kicker); }
+  .source { margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- band A: why the two sit side by side. Name both sources and the one topic they share; every name used
+     below is defined here or in band B. Body size: this is context, not the message. -->
+<section data-band="why">
+  <p class="context"><b>Anthropic</b>이 7월 블로그에 낸 컨텍스트 엔지니어링 새 규칙과, <b>저희</b>가 AWS&nbsp;블로그에 쓴 에이전트 Deep&nbsp;Insight의 4계층 컨텍스트 엔지니어링. 둘 다 “컨텍스트(AI의 작업 기억)에 무엇을 넣을지”를 다룬다. 나란히 놓고 대입해 봤다.</p>
+</section>
+
+<hr class="rule">
+
+<!-- band B: the hero. Two "…란" panels, one gist line each. Left: the other side's rules as before → after rows,
+     numbered so the arrows below can cite them. Right: your items, each a plain name + the standard term in
+     parentheses + one line with one number. Panel titles are the largest black text on the page. -->
+<section data-band="define">
+  <div class="panels">
+    <div class="panel">
+      <div class="p-title">Anthropic 새 규칙이란</div>
+      <div class="p-gist">최신 모델은 프롬프트 80%를 지워도 성능 그대로.<br>그래서 프롬프트를 이렇게 바꾸라고 한다</div>
+      <div class="rules">
+        <div class="r-head"><span></span><span>이전엔</span><span></span><span>지금은</span></div>
+        <div class="r-row"><span class="n">①</span><span class="a">규칙을 빼곡히 적기</span><span class="ar">→</span><span class="b">판단 기준만 주기</span></div>
+        <div class="r-row"><span class="n">②</span><span class="a">예시를 잔뜩 넣기</span><span class="ar">→</span><span class="b">도구·형식을 설계</span></div>
+        <div class="r-row"><span class="n">③</span><span class="a">정보를 전부 미리</span><span class="ar">→</span><span class="b">필요할 때만 불러오기</span></div>
+        <div class="r-row"><span class="n">④</span><span class="a">같은 말을 반복</span><span class="ar">→</span><span class="b">도구 설명은 한 줄</span></div>
+        <div class="r-row"><span class="n">⑤</span><span class="a">메모리를 사람이 관리</span><span class="ar">→</span><span class="b">모델이 스스로 기록</span></div>
+        <div class="r-row"><span class="n">⑥</span><span class="a">짧은 스펙</span><span class="ar">→</span><span class="b">코드·화면·채점 기준 첨부</span></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="p-title">Deep Insight 4계층이란</div>
+      <div class="p-gist">컨텍스트가 넘치지 않게 하는 장치 4개.<br>그중 2계층이 프롬프트다</div>
+      <div class="layers">
+        <div class="l-row"><div class="l-name">1계층 컨텍스트를 나눈다 <span class="term">(멀티 에이전트 격리)</span></div><div class="l-desc">에이전트마다 컨텍스트 따로 · 코더는 25K 토큰 이내</div></div>
+        <div class="l-row"><div class="l-name">2계층 짧게 답하게 한다 <span class="term">(프롬프트 제어)</span></div><div class="l-desc">프롬프트로 길이·형식·규칙 지정 · 답은 1,500토큰 이내</div></div>
+        <div class="l-row"><div class="l-name">3계층 무거운 건 파일로 <span class="term">(파일 외부화)</span></div><div class="l-desc">코드·결과는 파일에, 컨텍스트엔 위치만 · 95% 절감</div></div>
+        <div class="l-row"><div class="l-name">4계층 따로 검증한다 <span class="term">(검증·안전장치)</span></div><div class="l-desc">다른 에이전트가 숫자를 다시 계산 · 오차 0.01까지</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<!-- band C: the question with subject and object, the answer in an accent band right under it (it takes the
+     question's verb), then one mapping row per item: item → arrow labelled with the rule it rests on → verdict
+     sentence. The box style is the verdict: plain = unchanged, accent fill = this one changes, heavy = still
+     required. A dotted arrow and "해당 규칙 없음" when no rule applies. -->
+<section data-band="map">
+  <p class="q">그럼 Deep&nbsp;Insight 4계층은 Anthropic 새 규칙에도 유효할까?</p>
+  <p class="answer"><b>답:</b> 3계층은 새 규칙에서도 유효하고, 프롬프트(2계층)는 더 다듬을 수 있다</p>
+  <div class="note">①②③⑥은 위 패널의 규칙 번호</div>
+  <svg width="968" height="208" viewBox="0 0 968 208">
+    <defs>
+      <marker id="ahI" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="s-arrow"/></marker>
+      <marker id="ahA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="s-arrow-accent"/></marker>
+      <marker id="ahR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="s-arrow-return"/></marker>
+    </defs>
+
+    <!-- row 1: no rule applies. Dotted arrow, plain box. y 2-46 -->
+    <text x="0" y="31" font-size="19" class="s-text bold">1계층 컨텍스트를 나눈다</text>
+    <text x="403" y="16" font-size="17" text-anchor="middle" class="s-text-2 bold">해당 규칙 없음</text>
+    <line x1="258" y1="30" x2="548" y2="30" class="s-line-return" marker-end="url(#ahR)"/>
+    <rect x="556" y="2" width="412" height="44" rx="10" class="s-box"/>
+    <text x="576" y="31" font-size="20" class="s-text bold">컨텍스트는 필요할 때만 나눈다 (그대로)</text>
+
+    <!-- row 2: the item that changes. Accent arrow, label and box; the only accent in this band. y 54-98 -->
+    <text x="0" y="83" font-size="19" class="s-text bold">2계층 짧게 답하게 한다</text>
+    <text x="403" y="68" font-size="17" text-anchor="middle" class="s-text-accent bold">①②⑥ 규칙·예시 → 판단 기준·코드</text>
+    <line x1="258" y1="82" x2="548" y2="82" class="s-line-accent" marker-end="url(#ahA)"/>
+    <rect x="556" y="54" width="412" height="44" rx="10" class="s-box-accent"/>
+    <text x="572" y="82" font-size="17" class="s-text bold">규칙·예시 대신 코드·채점 기준을 넣을 수 있다</text>
+
+    <!-- rows 3-4: items that stay required. Heavy boxes. y 106-152, 160-206 -->
+    <text x="0" y="136" font-size="19" class="s-text bold">3계층 무거운 건 파일로</text>
+    <text x="403" y="121" font-size="17" text-anchor="middle" class="s-text-2 bold">③ 필요할 때만 불러오기</text>
+    <line x1="258" y1="135" x2="548" y2="135" class="s-line" marker-end="url(#ahI)"/>
+    <rect x="557" y="107" width="410" height="46" rx="10" class="s-box-heavy"/>
+    <text x="576" y="136" font-size="20" class="s-text bold">파일로 옮기기는 계속 필요하다</text>
+
+    <text x="0" y="190" font-size="19" class="s-text bold">4계층 따로 검증한다</text>
+    <text x="403" y="175" font-size="17" text-anchor="middle" class="s-text-2 bold">검증은 별도 스킬(절차)·에이전트로</text>
+    <line x1="258" y1="189" x2="548" y2="189" class="s-line" marker-end="url(#ahI)"/>
+    <rect x="557" y="161" width="410" height="46" rx="10" class="s-box-heavy"/>
+    <text x="576" y="190" font-size="20" class="s-text bold">별도 검증은 계속 필요하다</text>
+  </svg>
+</section>
+
+<hr class="rule">
+
+<!-- band D: one number per source. Title with a subject, the number as the biggest text in the card, one line
+     saying what the number measures (always loaded vs loaded on demand, not one blurred claim). -->
+<section data-band="cards">
+  <div class="cards">
+    <div class="card gray">
+      <div class="card-title">Anthropic이 줄인 프롬프트의 예</div>
+      <div class="num">9,100자 → 한 줄</div>
+      <div class="card-sub after">‘할 일 목록’ 도구의 설명문. 예시·목록을 빼고 한 줄 설명 + 상태값 3개 + 규칙 하나만 남김 (규칙 ④)</div>
+    </div>
+    <div class="card gray">
+      <div class="card-title">Deep Insight가 파일로 옮긴 예</div>
+      <div class="num">20K → 500토큰</div>
+      <div class="card-sub after">항상 넣는 양: 스킬(분석 절차) 설명서 전체 대신 목록만 (97%↓). 필요한 스킬은 그때 3K씩 따로 불러옴 (3계층)</div>
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<!-- band E: the answer generalized as one idea (the only large accent text), one line pointing to the post body
+     for links (an image cannot hold one), the sources at the floor size. -->
+<section data-band="takeaway">
+  <p class="takeaway">모델이 똑똑해져도 컨텍스트 엔지니어링은 남고,<br>프롬프트만 모델에 맞춰 다듬는다</p>
+  <p class="sub-takeaway">4계층의 코드와 수치는 AWS 블로그 글에 <span class="cta-note">(링크는 본문)</span></p>
+  <p class="source">출처: Anthropic, The new rules of context engineering for Claude 5 generation models (2026-07-24) · AWS ML Blog, Four layers of context engineering for production AI agents (2026-11-04)</p>
+</section>
+
+</div>
+</body>
+</html>

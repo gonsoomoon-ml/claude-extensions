@@ -5,6 +5,7 @@ html, body {
   width: var(--canvas-w); height: var(--canvas-h);
   background: var(--bg); color: var(--ink); font-family: var(--font);
   overflow: hidden; -webkit-font-smoothing: antialiased;
+  word-break: keep-all; overflow-wrap: break-word;   /* Korean wraps at spaces, never inside a word */
 }
 svg text { font-family: var(--font); }
 
@@ -22,6 +23,7 @@ svg text { font-family: var(--font); }
 .headline { font-size: var(--fs-headline); font-weight: 700; line-height: 1.2; color: var(--accent); letter-spacing: -0.02em; margin-top: 6px; }
 .section-title { font-size: var(--fs-section); font-weight: 700; }
 .section-src { font-size: var(--fs-label); color: var(--ink-2); }
+.sec-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; margin-bottom: 4px; }   /* a section title and its source tail */
 .kicker { font-size: var(--fs-kicker); font-weight: 700; color: var(--ink-2); }
 .kicker.accent { color: var(--accent); }
 .notes { list-style: none; margin-top: 8px; }
@@ -55,6 +57,7 @@ svg text { font-family: var(--font); }
 .s-box { fill: var(--surface); stroke: var(--ink); stroke-width: 2; }
 .s-box-strong { fill: var(--surface); stroke: var(--ink); stroke-width: 2.5; }
 .s-box-accent { fill: var(--accent-fill); stroke: var(--accent); stroke-width: 2; }
+.s-box-heavy { fill: var(--surface); stroke: var(--ink); stroke-width: 4; }   /* a part that must stay (scheme D verdicts) */
 .s-box-gray { fill: var(--gray); stroke: none; }
 .s-group { fill: var(--surface); stroke: var(--dash); stroke-width: 1.8; stroke-dasharray: 6 5; }
 .s-line { stroke: var(--ink); stroke-width: 2; fill: none; }

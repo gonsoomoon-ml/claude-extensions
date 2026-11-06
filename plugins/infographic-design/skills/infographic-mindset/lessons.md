@@ -66,3 +66,20 @@ Known gaps after this round:
 - Every agent self-approved its ASCII mockup because the test prompt forbade questions. In real use the mockup goes to the person first; the skill text says so, the test could not exercise it.
 - No run used a reference palette different from the default, so `sample_colors.py` → `tokens.css` substitution is untested by agents (only by hand).
 - S1 stays contaminated by design; re-test that genre with S4-style fresh briefs.
+
+## 2026-11-06 · first real post built with the plugin (scheme D)
+
+No comparison run this time: one post, built with the plugin and reviewed round by round by the person who posted it. The post held an Anthropic blog's new context-engineering rules up against Deep Insight's four layers. The first draft used scheme C; the finished image is now the scheme D template.
+
+What the rounds were about:
+- Lint passed on every render except the text budget (933 characters against C's 650, accepted on purpose for a teaching image). The review still took about thirty rounds, and almost all of them were words that only reading found: a name used before anything defined it ("7월 지침", "새 규칙", "4층"), verdict chips without a subject ("그대로", "남는다"), a question with no subject, a term the reader knew under another word (지시문 → 프롬프트, 층 / Layer → 계층), a verb with two readings (빼기 → 옮기기), negative or hedging words in the image, a verdict that claimed a direction nobody had measured, two numbers that read as one claim, a takeaway that listed three items, and a word that contradicted the previous post in the series ("일 나누기").
+- The structure moved for one reason, twice: readers knew neither framework. A tension headline over two stacks became two definition panels first, the question and answer became the header of the mapping, and the takeaway became the only large accent line.
+- The post body was split from the image only after the image was final. The first body repeated the image's lists; the fix is the division now in SKILL.md (same order, three shared lines, the body owns the why).
+- Mechanical defects showed up in close crops, not in the whole PNG scaled down: a Korean word split at the line end (상 / 태값), a name split across lines (Deep / Insight), a section title glued to its source tail because `.sec-head` lived only in the scheme C template, bands squeezed to 17 px apart, one word left alone on a last line. They are defects 13–16.
+
+What changed in 0.2.0: the wording read and the image/body division in this skill; scheme D with a 950-character budget; `word-break: keep-all`, `.sec-head` and `s-box-heavy` in base.css; `--fs-question` and `--fs-panel-title` tokens; `render.py --bands --outline`; the band gap and short last line warnings in `lint.py`.
+
+Known gaps:
+- One post and one reviewer. The wording rules are that reviewer's corrections, generalized; no second post has tested them yet.
+- The 950-character budget for D comes from one image that fit the canvas at the 16 px floor. A second D image should confirm or lower it.
+- The short-last-line warning measures HTML paragraphs only. SVG text does not wrap, and a block with an explicit `<br>` is skipped as a chosen break.

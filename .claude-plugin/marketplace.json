@@ -21,7 +21,7 @@
     {
       "name": "infographic-design",
       "source": "./plugins/infographic-design",
-      "description": "Make one infographic image for a LinkedIn or feed post: infographic-mindset (three tests, canvas and type fixed by the feed, one accent, three design schemes taken from shipped images) and infographic-build (tokens.css + base.css, three HTML/SVG templates, render.py for Chromium PNG + text/layout report, lint.py for overflow, text budget, 16px floor, light small text, one accent, no literal hex, and a defects table)."
+      "description": "Make one infographic image for a LinkedIn or feed post: infographic-mindset (three tests, a line-by-line wording read, canvas and type fixed by the feed, one accent, four design schemes taken from finished post images, how the image and the post body divide the work) and infographic-build (tokens.css + base.css, four HTML/SVG templates, render.py for Chromium PNG + text/layout report + per-band PNGs + reading-order outline, lint.py for overflow, text budget, 16px floor, light small text, one accent, no literal hex, band gap and short last lines, and a defects table)."
     }
   ]
 }

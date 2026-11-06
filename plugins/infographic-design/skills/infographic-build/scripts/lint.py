@@ -2,11 +2,15 @@
 """Judge a render report against the infographic rules that a script can check.
 
 usage: python3 lint.py report.json [--budget 650] [--min-font 16] [--small 20] [--light 0.30] [--source page.html]
+                       [--gap 12] [--short 0.25]
 
 Checks: no overflow, visible-text budget, smallest text size (normalized to 1080 width),
 no light color on small text, one accent hue family, no literal hex in the page source
-(colors belong in tokens.css). Exit 1 on any FAIL. Judgment calls (does the shape carry the
-meaning, is there one dominant headline) stay with the person looking at the PNG.
+(colors belong in tokens.css). Exit 1 on any FAIL.
+Warnings: bands closer than --gap px (content grew into the spacing), and wrapped paragraphs
+whose last line is shorter than --short of their longest line (one word left alone).
+Judgment calls (does the shape carry the meaning, is there one dominant headline, can a reader
+place every word) stay with the person looking at the PNG and reading render.py --outline.
 """
 import argparse, colorsys, json, re, sys
 
@@ -25,6 +29,7 @@ def main():
     ap.add_argument("report"); ap.add_argument("--budget", type=int, default=650)
     ap.add_argument("--min-font", type=float, default=16); ap.add_argument("--small", type=float, default=20)
     ap.add_argument("--light", type=float, default=0.30); ap.add_argument("--source")
+    ap.add_argument("--gap", type=float, default=12); ap.add_argument("--short", type=float, default=0.25)
     a = ap.parse_args()
     rep = json.load(open(a.report, encoding="utf-8"))
     scale = 1080 / rep["viewport"]["w"]
@@ -62,6 +67,16 @@ def main():
         body = re.sub(r"<style.*?</style>", "", src, flags=re.S)
         hexes = sorted(set(re.findall(r"#[0-9A-Fa-f]{6}\b", body)))
         check("no literal hex", not hexes, "colors come from tokens.css" if not hexes else f"literal colors in page: {hexes[:6]}")
+    secs = sorted(rep.get("sections", []), key=lambda x: x["top"])
+    gaps = [(q["top"] - p_["bottom"], p_["name"], q["name"]) for p_, q in zip(secs, secs[1:])]
+    if gaps:
+        g, n1, n2 = min(gaps, key=lambda x: x[0])
+        if g * scale < a.gap: rows.append(("band gap", "WARN", f"{g}px between {n1} and {n2} (want >= {a.gap:g}); cut a line before shrinking type"))
+        else: rows.append(("band gap", "PASS", f"bands at least {min(x[0] for x in gaps)}px apart"))
+    if "blocks" in rep:   # reports from render.py 0.2+
+        tails = [b for b in rep["blocks"] if b.get("lines", 0) >= 2 and b.get("lastLineRatio", 1) < a.short]
+        if tails: rows.append(("short last line", "WARN", f"{len(tails)} wrapped line(s) end in a short tail: {[b['text'][-12:] for b in tails[:4]]}; rephrase or move a word"))
+        else: rows.append(("short last line", "PASS", "no wrapped line ends with a word left alone"))
     w = max(len(n) for n, _, _ in rows)
     for n, s, d in rows: print(f"{s}  {n:<{w}}  {d}")
     print("RESULT:", "FAIL" if fails else "PASS")

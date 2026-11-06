@@ -23,6 +23,8 @@
 
   /* type scale, px at 1080 width (scale with the canvas) */
   --fs-headline: 62px;    /* the one dominant line */
+  --fs-question: 54px;    /* a two-line question headline with long Latin names: 62px reads as shouting */
+  --fs-panel-title: 36px; /* titles of the two definition panels (scheme D) */
   --fs-takeaway: 42px;    /* closing statement */
   --fs-section: 32px;     /* band / column titles */
   --fs-context: 28px;     /* lines above the headline */

@@ -16,3 +16,7 @@ Every row came from a render that was looked at. Check the list before re-render
 | 10 | Image cropped in the feed | Taller than 4:5 | 1080 × 1350 portrait or 1200 × 800 landscape, 2× scale, PNG under 8 MB |
 | 11 | Text budget blown by the footer | Sources line counted as body | Keep sources at `--fs-source` (16 px); `lint.py` excludes text at or below the floor |
 | 12 | Two accent hues (a red and an orange) | Hand-typed hex in the page | No literal hex outside `tokens.css`; `lint.py` → *no literal hex*, *one accent* |
+| 13 | A Korean word splits at the line end (상 / 태값), or a two-word name splits (Deep / Insight) | Chromium may break Korean between any two syllables; a space inside a name is a break opportunity | `word-break: keep-all` (in base.css since 0.2.0); `&nbsp;` inside names that must stay on one line |
+| 14 | A section title and its source tail run together | `.sec-head` lived only in the scheme C template and was not copied with the markup | `.sec-head` is in base.css since 0.2.0 |
+| 15 | Bands crowd each other after a few lines were added | the page spreads bands with `space-between`, so new lines eat the gaps (17 px in the first scheme D image) | `lint.py` → *band gap*; cut a line or shorten a panel before shrinking type |
+| 16 | One short word alone on the last line of a paragraph (프롬프트다) | the line runs just past the column | `lint.py` → *short last line*; rephrase, move a word, or break two sentences with a `<br>` |
