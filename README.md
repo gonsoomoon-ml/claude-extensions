@@ -73,6 +73,7 @@ mkdir -p ~/.claude/skills/my-skill
 | [deck-design](plugins/deck-design/README.md) | deck-mindset · deck-build · deck-web · deck-agent-team | 슬라이드 데크 디자인 규칙 (5색 vocabulary · 15pt floor · 3-tier 위계 · 5 named layouts · 템플릿 프로필 aurora-black) + 빌드 도구 (토큰 · pptxgenjs/python-pptx 패턴 · 검증 → 렌더 → 확인 QA, 라틴 Amazon Ember + 한글 Noto) + Phase-2 검토용 critic agent team (visual / content / cognitive / compliance + synthesizer + gate) + 웹 덱 (deck-web: HTML 한 파일 · 클릭 빌드 · 발표자 노트 · 한\|EN 전환 · 캡처 넘침 검사 · S3+CloudFront 공개) |
 | [concise-response](plugins/concise-response/README.md) | — (SessionStart hook) | 모든 세션에서 요약 먼저·한국어로 응답: 짧은 요약(결론·핵심 bullet) → 필요한 세부만 → 상세는 요청할 때만. 영어 프롬프트에도 한국어로 답함(영어는 요청 시). output style 을 바꾸지 않고 덧붙이는 방식이라 다른 스타일과 함께 쓸 수 있음 |
 | [infographic-design](plugins/infographic-design/README.md) | infographic-mindset · infographic-build | LinkedIn·피드 포스팅용 인포그래픽 이미지 1장. 판단 기준 (3초 메시지 · 흐림 테스트 · 본문 글자 예산 · 문장 읽기 점검, 캔버스 4:5/3:2 와 16px 하한은 피드가 정함, 강조색 1종, 이미지와 본문의 분업) + 완성된 포스팅 이미지에서 뽑은 설계 도식 4종 (개념도·구조도 2단 / 질문+측정 카드+막대 / 긴장 헤드라인+구조 비교+실루엣 대응 / 정의 패널+대입) + 빌드 도구 (tokens.css · base.css · HTML/SVG 템플릿 4종 · Chromium 렌더+보고서+띠별 확대+읽는 순서 출력 · 넘침/글자 예산/최소 크기/연회색/강조색/hex/띠 간격/짧은 마지막 줄 린트 · 실제 렌더에서 나온 결함표 16가지) |
+| [demo-video](plugins/demo-video/README.md) | recording-demo-videos | 웹 UI 데모·링크드인 영상. 대본 규칙(인트로 카드 · 챕터 간지 · 합니다체 45자 자막 · 정리 카드) + Playwright 실시간 녹화 + 페이지 안 CSS 카메라로 선명한 확대 + ffmpeg 자막·카드 굽기 + 대기 구간 배속 + 여러 클립을 하이라이트 릴로 묶기. 직접 찍은 화면 녹화(.mov)에 자막만 입히기도 함. GUI 없는 리눅스에서 동작. hi-space/hi-aws-skills demo-video-recorder 1.2.0 포크(MIT) |
 
 이 레포 자체가 마켓플레이스(`gonsoomoon-extensions`)입니다.
 
@@ -81,6 +82,7 @@ mkdir -p ~/.claude/skills/my-skill
 /plugin install deck-design@gonsoomoon-extensions
 /plugin install concise-response@gonsoomoon-extensions
 /plugin install infographic-design@gonsoomoon-extensions
+/plugin install demo-video@gonsoomoon-extensions
 /reload-plugins
 ```
 
@@ -90,20 +92,19 @@ mkdir -p ~/.claude/skills/my-skill
 
 | 플러그인 | 설명 | 기반 |
 |------|------|------|
-| [demo-video-recorder](https://github.com/hi-space/hi-aws-skills/tree/main/plugins/demo-video-recorder) | 웹 데모 영상을 자동으로 녹화하고 자막을 입힘. Playwright 실시간 녹화 + 패널 zoom in/out + 대기 구간 배속 + 여러 클립을 하이라이트 릴로 묶기. GUI 없는 리눅스에서 Playwright + ffmpeg 만으로 동작 | — |
 | [aws-diagram-design](https://github.com/hi-space/hi-aws-skills/tree/main/plugins/aws-diagram-design) | AWS 공식 아이콘으로 SVG/PNG 다이어그램 생성 — 문서·슬라이드에 바로 넣는 완성 이미지. 원본 대비 글씨를 선명하게, 공백을 적게, padding/margin 을 맞춤 | [masangbeom/aws-diagram-design](https://github.com/masangbeom/aws-diagram-design) |
 | [aws-drawio-diagram](https://github.com/hi-space/hi-aws-skills/tree/main/plugins/aws-drawio-diagram) | 편집 가능한 `.drawio` 아키텍처 다이어그램 생성 — SVG 는 세부 수정이 불편해 draw.io 에서 계속 고칠 수 있는 형태로 그림. 스타일·선 연결을 다듬고, 스텐실 카탈로그(1,000개+)와 검증 스크립트 포함 | [vidanov/aws-architecture-diagram-skill](https://github.com/vidanov/aws-architecture-diagram-skill) |
 | [aws-ppt-master](https://github.com/hi-space/hi-aws-skills/tree/main/plugins/aws-ppt-master) | 문서·주제에서 네이티브 편집 가능한 PPTX 생성. 이미지 생성은 Amazon Bedrock, AWS 아이콘 304개 내장. 브라우저 미리보기에서 요소를 직접 수정하거나, 주석을 달아 그 부분만 AI 로 수정 | [hugohe3/ppt-master](https://github.com/hugohe3/ppt-master) |
 
 ```
 /plugin marketplace add hi-space/hi-aws-skills
-/plugin install demo-video-recorder@hi-aws-skills
 /plugin install aws-diagram-design@hi-aws-skills
 /plugin install aws-drawio-diagram@hi-aws-skills
 /plugin install aws-ppt-master@hi-aws-skills
 /reload-plugins
 ```
 
+- `demo-video-recorder` 는 이 레포에 `demo-video` 로 포크해 들여왔습니다(위 플러그인 목록).
 - **다이어그램은 어느 쪽?** 문서·슬라이드에 넣을 완성된 그림이면 `aws-diagram-design`, draw.io 에서 계속 편집할 파일이면 `aws-drawio-diagram`.
 - `aws-ppt-master` 는 설치 후 `pip install -r requirements.txt` 와 Bedrock 의 Stability AI 모델 접근 활성화가 필요합니다 → [설정](https://github.com/hi-space/hi-aws-skills/tree/main/plugins/aws-ppt-master#bedrock-설정)
 - 작성자 hi-space · MIT. 원 저작자 고지는 각 플러그인 디렉터리의 `LICENSE` / `THIRD_PARTY_LICENSES.md` / `UPSTREAM.md` 를 따릅니다.

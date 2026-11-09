@@ -4,7 +4,7 @@
     "name": "gonsoomoon-ml"
   },
   "metadata": {
-    "description": "Plugins from gonsoomoon-ml/claude-extensions: deck-design (slide deck design and build), concise-response (summary-first responses) and infographic-design (one feed-post infographic that survives blurring and reposting: design schemes, tokens, templates, render and lint).",
+    "description": "Plugins from gonsoomoon-ml/claude-extensions: deck-design (slide deck design and build), concise-response (summary-first responses), infographic-design (one feed-post infographic that survives blurring and reposting: design schemes, tokens, templates, render and lint) and demo-video (demo / LinkedIn videos of a web UI: story script, Playwright recording with an in-page camera, captions, cards and a highlight reel; fork of hi-space/hi-aws-skills demo-video-recorder).",
     "version": "1.0.0"
   },
   "plugins": [
@@ -22,6 +22,11 @@
       "name": "infographic-design",
       "source": "./plugins/infographic-design",
       "description": "Make one infographic image for a LinkedIn or feed post: infographic-mindset (three tests, a line-by-line wording read, canvas and type fixed by the feed, one accent, four design schemes taken from finished post images, how the image and the post body divide the work) and infographic-build (tokens.css + base.css, four HTML/SVG templates, render.py for Chromium PNG + text/layout report + per-band PNGs + reading-order outline, lint.py for overflow, text budget, 16px floor, light small text, one accent, no literal hex, band gap and short last lines, and a defects table)."
+    },
+    {
+      "name": "demo-video",
+      "source": "./plugins/demo-video",
+      "description": "Demo / LinkedIn videos of a web UI on a headless Linux box: story script first (intro card, chapters, 합니다체 captions, summary card), Playwright wall-clock recording with an in-page CSS camera (crisp zoom-ins), title card and captions burned from beats anchored to UI events, sped-up waits, highlight reel from several clips. Also captions user-made screen recordings (.mov). Fork of hi-space/hi-aws-skills demo-video-recorder 1.2.0 (MIT)."
     }
   ]
 }
