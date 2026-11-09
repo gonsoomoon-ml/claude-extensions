@@ -2,9 +2,9 @@
 
 Write the script before recording. It has four parts, and `make_cards.py` / `edit_demo.py` only render what is decided here.
 
-## 1. Intro card (6–8 s): the message, and what the demo shows
+## 1. Intro card: the message, and what the demo shows
 
-The viewer needs two things before the first screen: **what this video says** and **what they are about to see** to back it up.
+The viewer needs two things before the first screen: **what this video says** and **what they are about to see** to back it up. Two shapes work: the full card (6–8 s, title plus 2–3 rows) when the video has no chapter cards, or a **title-only card (3 s)** when chapter cards and the summary card already carry what the demo shows (chosen for the governance demo, 2026-11).
 
 - kicker: product or series name
 - title: the message, one or two lines, 합니다체 or a short claim
@@ -49,7 +49,8 @@ Rules for every beat, title, subtitle and card row:
 - **No speed labels and no notes about the recording** ("4배속", "이 녹화에서는 누르지 않았습니다"). Report skipped actions in the chat, not on screen.
 - Anchor `at` at the second the event is visible (a click, a status text, a panel, a result). If the take did something other than planned, caption what the take shows.
 - Numbers only when the number is the feature ("모델별 100만 토큰당 가격을 설정합니다"); what this take cost or how long it ran is noise.
-- The last beat of a chapter can be `"style": "insight"` (blue box): the chapter's take home message in one sentence. It becomes a row on the summary card.
+- Every caption has one look (1.3.0: bold white on a blue box, visible on dark UIs); `"style": "insight"` is still accepted and marks the chapter's take home sentence, which becomes a row on the summary card.
+- Give a caption `dur` when the next action must start clean (an exit, a new command); the default runs up to 7 s and would hang over the next screen.
 - `"pos": "top"` when the lower third would sit on the evidence (a bottom table, a status bar).
 
 4–15 beats per clip at 1× is a normal density; a short sped-up piece may carry a single beat. Format and anchor forms: `python3 scripts/edit_demo.py --help`.

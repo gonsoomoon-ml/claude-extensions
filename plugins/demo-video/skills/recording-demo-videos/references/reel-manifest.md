@@ -14,7 +14,8 @@
 - `file`: a finished clip (already has title card and captions). Paths relative to the cwd where `edit_demo.py` runs.
 - `start`/`end`: seconds inside that clip; `end` null or omitted = to the end. The same clip may appear several times (intro window, then the payoff later).
 - `fade`: video and audio fade in/out per segment, seconds. 0.4 reads as a clean cut with no flash.
-- Each segment is re-encoded with the same x264 settings, then concatenated with stream copy, so the output is exactly the sum of windows.
+- Each segment is re-encoded with the same x264 settings and concatenated; the join is then re-encoded once more into one uniform stream (High 4.1, CRF 23, 3 Mbit/s cap, keyframe every 2 s, faststart). 1.2.0 stopped at the stream-copied concat, whose two-entry edit list made QuickTime freeze on a mid-video frame while the time kept running; `--copy` restores that output if you need it.
+- Deliver that one file. If a viewer reports a freeze, compare their copy's byte size and md5 with yours: a download cut short plays up to the missing bytes and then sticks.
 
 Choosing windows: open `raw/<stem>.camlog.json` and take `t` of the shots you want; clip time = camlog `t` minus the clip's trimmed lead-in (`edit_demo.py clip` prints `seconds` and starts 0.4 s before the first shot unless `--start` was given). Keep the title card (first 4 s of a clip) only for the first appearance of that clip.
 

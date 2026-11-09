@@ -1,7 +1,7 @@
 {
   "name": "demo-video",
-  "description": "Use when the user wants a demo, LinkedIn or product video of a web UI: zoom-ins on panels recorded with Playwright and an in-page CSS camera, a title card and captions burned from a story script anchored to UI events, sped-up waits, and a highlight reel cut from several clips; also captions a screen recording (.mov) the user made. Headless Linux, Playwright + ffmpeg, Korean fonts. Fork of hi-space/hi-aws-skills demo-video-recorder 1.2.0 (MIT). Korean triggers: 데모 영상, 시연 영상, 링크드인 영상, 영상 녹화, 화면 녹화 편집, 자막 넣어줘, 하이라이트 릴, 릴 만들어줘.",
-  "version": "1.2.0",
+  "description": "Use when the user wants a demo, LinkedIn or product video of a web UI or a terminal CLI (through a ttyd browser terminal): zoom-ins on panels recorded with Playwright and an in-page CSS camera, a title card and captions burned from a story script anchored to UI events, sped-up waits, and a highlight reel cut from several clips; also captions a screen recording (.mov) the user made. Headless Linux, Playwright + ffmpeg, Korean fonts. Fork of hi-space/hi-aws-skills demo-video-recorder 1.2.0 (MIT); 1.3.0 adds terminal scenes, one visible caption look, a single-pass re-encoded reel and Korean font fallbacks. Korean triggers: 데모 영상, 시연 영상, 링크드인 영상, 영상 녹화, 화면 녹화 편집, 자막 넣어줘, 하이라이트 릴, 릴 만들어줘.",
+  "version": "1.3.0",
   "author": {
     "name": "gonsoomoon-ml"
   },

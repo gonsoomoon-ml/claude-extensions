@@ -64,10 +64,10 @@ def test_skill_states_the_recording_and_tempo_defaults():
 
 
 def test_skill_is_lean():
-    """User request 2026-09-26: only what is necessary; over-constraints removed."""
+    """User request 2026-09-26: only what is necessary; over-constraints removed (1.3.0: terminal scenes added, cap raised to 1400)."""
     text = SKILL_MD.read_text()
     words = len(text.split())
-    assert words <= 1100, f"SKILL.md is {words} words; 1.1.0 was 2037 and was judged too constrained"
+    assert words <= 1400, f"SKILL.md is {words} words; 1.1.0 was 2037 and was judged too constrained"
     for residue in ("Laya", "Bedrock", "AgentCore", "Radix", "Settings 탭", "settings tab", "Argument video", "argument video"):
         assert residue not in text, f"project-specific residue {residue!r} in SKILL.md"
     for residue in ("Laya", "Bedrock", "AgentCore", "Registry", "argument video", "Argument video"):
@@ -102,7 +102,15 @@ def test_edit_demo_docstring_carries_the_look_constants():
     """caption-style.md is gone; the drawing constants must be readable from `edit_demo.py --help`."""
     code = (SKILL / "scripts" / "edit_demo.py").read_text()
     doc = code.split('"""')[1]
-    for token in ("1.25", "58", "32", "34", "h-150"):
+    for token in ("1.25", "58", "34", "h-150", "0x1f6feb"):
         assert token in doc, f"edit_demo.py docstring does not state {token}"
-    for token in ("size=58", "size=32", "size=34", "0x1f6feb", "h-150"):
+    for token in ("size=58", "BEAT_SIZE = 34", "0x1f6feb", "h-150", "REEL_ENCODE"):
         assert token in code, f"style constant {token} moved out of edit_demo.py"
+
+
+def test_terminal_helpers_ship_and_reel_is_single_pass():
+    """1.3.0: terminal scenes need term.mjs beside the example; the reel default is a one-pass re-encode (QuickTime)."""
+    assert (SKILL / "scripts" / "term.mjs").exists() and (SKILL / "scripts" / "terminal.example.mjs").exists()
+    code = (SKILL / "scripts" / "edit_demo.py").read_text()
+    assert "REEL_ENCODE" in code and '"--copy"' in code, "reel must re-encode by default and keep --copy for the old join"
+    assert "lang=ko" in code and "lang=ko" in (SKILL / "scripts" / "make_cards.py").read_text(), "font fallback must ask fontconfig for Korean"

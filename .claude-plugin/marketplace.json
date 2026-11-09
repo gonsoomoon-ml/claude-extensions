@@ -26,7 +26,7 @@
     {
       "name": "demo-video",
       "source": "./plugins/demo-video",
-      "description": "Demo / LinkedIn videos of a web UI on a headless Linux box: story script first (intro card, chapters, 합니다체 captions, summary card), Playwright wall-clock recording with an in-page CSS camera (crisp zoom-ins), title card and captions burned from beats anchored to UI events, sped-up waits, highlight reel from several clips. Also captions user-made screen recordings (.mov). Fork of hi-space/hi-aws-skills demo-video-recorder 1.2.0 (MIT)."
+      "description": "Demo / LinkedIn videos of a web UI on a headless Linux box: story script first (intro card, chapters, 합니다체 captions, summary card), Playwright wall-clock recording with an in-page CSS camera (crisp zoom-ins), title card and captions burned from beats anchored to UI events, sped-up waits, highlight reel from several clips. Also films a terminal CLI through a ttyd browser terminal (term.mjs) and captions user-made screen recordings (.mov). Fork of hi-space/hi-aws-skills demo-video-recorder 1.2.0 (MIT), 1.3.0."
     }
   ]
 }

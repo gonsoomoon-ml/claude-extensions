@@ -39,8 +39,8 @@ def _font(env: str, preferred: str, pattern: str) -> str:
     return out.stdout.strip() or preferred
 
 
-FONTS = {"bold": _font("DEMO_FONT_BOLD", "/usr/share/fonts/truetype/nanum/NanumSquareB.ttf", "sans:bold"),
-         "regular": _font("DEMO_FONT_REGULAR", "/usr/share/fonts/truetype/nanum/NanumSquareR.ttf", "sans")}
+FONTS = {"bold": _font("DEMO_FONT_BOLD", "/usr/share/fonts/truetype/nanum/NanumSquareB.ttf", "sans:bold:lang=ko"),
+         "regular": _font("DEMO_FONT_REGULAR", "/usr/share/fonts/truetype/nanum/NanumSquareR.ttf", "sans:lang=ko")}
 
 
 def colour(value: str | None) -> str:

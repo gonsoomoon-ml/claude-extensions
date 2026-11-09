@@ -10,13 +10,16 @@
 encodes H.264 1080p30 + silent AAC. With `--script` the captions are the beats of a script JSON, each anchored
 to a camlog event (see script_time). Without a script the captions fall back to the camera shot labels,
 which describe where the camera looks, not what the viewer should understand.
-`reel` concatenates trimmed windows from several finished clips into one highlight video.
+`reel` concatenates trimmed windows from several finished clips and re-encodes the join into ONE H.264 stream
+(1.3.0: a stream-copied concat carried a two-entry edit list that made QuickTime freeze mid-video; `--copy` keeps
+the old behaviour). Default output: High 4.1, CRF 23, 3 Mbit/s cap, keyframe every 2 s, faststart, one file.
 Nothing about the recorded UI is altered; only overlays are added. Temp files are removed when each command ends.
 
 Look (fixed here so every clip of a set matches; change the constants, re-run every clip):
   title      bold 58 px at x 96, y h-260, 0.2-4.2 s     subtitle  regular 30 px at y h-170, 0.5-4.2 s
-  beat       regular 32 px at x 96, y h-150 (y 120 with "pos": "top"), dark box 0x0b0f14@0.72, border 18
-  insight    bold 34 px, same place, blue box 0x1f6feb@0.82        tag  mono 22 px top-right (off unless --tag)
+  beat       bold 34 px at x 96, y h-150 (y 120 with "pos": "top"), white on a blue box 0x1f6feb@0.82, border 18
+             (1.3.0: one look for every caption, visible on dark UIs; DEMO_BEAT_BOX env overrides the box colour;
+             "style": "insight" is accepted and looks the same)   tag  mono 22 px top-right (off unless --tag)
   every caption fades 0.35 s in and out; one caption at a time; a beat never starts under the title card
   fonts: DEMO_FONT_BOLD / DEMO_FONT_REGULAR / DEMO_FONT_MONO env, else Nanum, else fc-match (Korean needs a CJK font)
 
@@ -31,7 +34,7 @@ Script JSON:
      {"at": "caption:System 2에 복구", "offset": 0.5, "text": "확률 0.95인데도 규칙이 이관합니다"},
      {"at": "note:play", "text": "…"},          # any rec.note(kind)
      {"at": "shot:stage#2", "text": "…"},       # 2nd occurrence
-     {"at": 41.0, "text": "…", "style": "insight"},  # raw seconds; insight = accent box
+     {"at": 41.0, "text": "…", "dur": 5.5},         # raw seconds; dur = end the caption before the next action
      {"at": "shot:table", "text": "…", "pos": "top"}  # caption at the top when the lower third hides the evidence
    ]}
   Beat duration defaults to the gap to the next beat (max 7 s, min 1.5 s). `#n` counts occurrences of that
@@ -43,6 +46,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shlex
 import subprocess
 import sys
@@ -60,11 +64,15 @@ def _font(env: str, preferred: str, pattern: str) -> str:
     out = subprocess.run(["fc-match", "-f", "%{file}", pattern], capture_output=True, text=True)
     return out.stdout.strip() or preferred
 
-FONT_BOLD = _font("DEMO_FONT_BOLD", "/usr/share/fonts/truetype/nanum/NanumSquareB.ttf", "sans:bold")
-FONT_REG = _font("DEMO_FONT_REGULAR", "/usr/share/fonts/truetype/nanum/NanumSquareR.ttf", "sans")
-FONT_MONO = _font("DEMO_FONT_MONO", "/usr/share/fonts/truetype/nanum/NanumGothicCoding.ttf", "monospace")
+# fallback patterns ask fontconfig for a Korean-capable face: plain "sans" returned DejaVu, which draws Hangul as boxes
+FONT_BOLD = _font("DEMO_FONT_BOLD", "/usr/share/fonts/truetype/nanum/NanumSquareB.ttf", "sans:bold:lang=ko")
+FONT_REG = _font("DEMO_FONT_REGULAR", "/usr/share/fonts/truetype/nanum/NanumSquareR.ttf", "sans:lang=ko")
+FONT_MONO = _font("DEMO_FONT_MONO", "/usr/share/fonts/truetype/nanum/NanumGothicCoding.ttf", "monospace:lang=ko")
 W, H, FPS = 1920, 1080, 30
 DEFAULT_SPEED = 1.25  # a demo at real time drags; 1.25x reads as a confident pace without looking sped up
+# caption box: blue, so it stays visible on dark UIs (the old near-black box vanished on dark pages and terminals)
+BEAT_BOX = os.environ.get("DEMO_BEAT_BOX", "0x1f6feb@0.82")
+BEAT_SIZE = 34
 
 
 def run(cmd: list[str]) -> None:
@@ -80,7 +88,7 @@ def probe_duration(path: Path) -> float:
 
 def drawtext(textfile: Path, *, font: str, size: int, x: str, y: str, start: float, end: float,
              color: str = "white", box: bool = True, alpha_fade: bool = True,
-             boxcolor: str = "0x0b0f14@0.72") -> str:
+             boxcolor: str = BEAT_BOX) -> str:
     enable = f"between(t\\,{start:.2f}\\,{end:.2f})"
     # expansion=none: the text is literal (a '%' would otherwise start a drawtext expansion sequence)
     parts = [f"drawtext=fontfile={font}", f"textfile={textfile}", "expansion=none", f"fontsize={size}", f"fontcolor={color}",
@@ -173,11 +181,8 @@ def _encode_clip(raw: Path, out: Path, title, subtitle, tag, start: float, end: 
             f = tmp / f"beat{i}.txt"
             f.write_text(b["text"])
             y = "120" if b.get("pos") == "top" else "h-150"  # pos=top when the lower third would cover the evidence
-            if b.get("style") == "insight":
-                filters.append(drawtext(f, font=FONT_BOLD, size=34, x="96", y=y, start=t0, end=t1,
-                                        color="0xffffff", boxcolor="0x1f6feb@0.82"))
-            else:
-                filters.append(drawtext(f, font=FONT_REG, size=32, x="96", y=y, start=t0, end=t1))
+            # one look for every beat ("style": "insight" is accepted for old scripts and renders the same)
+            filters.append(drawtext(f, font=FONT_BOLD, size=BEAT_SIZE, x="96", y=y, start=t0, end=t1, color="0xffffff"))
             placed += 1
     elif captions:
         labelled = [s for s in shots if s.get("label") and rel(s["t"]) > 4.6]
@@ -189,7 +194,7 @@ def _encode_clip(raw: Path, out: Path, title, subtitle, tag, start: float, end: 
                 continue
             f = tmp / f"cap{i}.txt"
             f.write_text(shot["label"])
-            filters.append(drawtext(f, font=FONT_REG, size=32, x="96", y="h-150", start=t0, end=t1))
+            filters.append(drawtext(f, font=FONT_BOLD, size=BEAT_SIZE, x="96", y="h-150", start=t0, end=t1, color="0xffffff"))
             placed += 1
     vf = ",".join(filters)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -207,8 +212,15 @@ def probe_size(path: Path) -> str:
     return out.rstrip("x")
 
 
-def build_reel(spec: Path, out: Path) -> None:
-    """spec: {"segments": [{"file": "...mp4", "start": 0, "end": 25, "fade_in": 0}, ...], "fade": 0.4}"""
+# final reel encode: one uniform stream that QuickTime, browsers and LinkedIn all take; the cap keeps zoom transitions
+# from spiking past what a remote download or a phone can stream
+REEL_ENCODE = ["-c:v", "libx264", "-preset", "medium", "-crf", "23", "-maxrate", "3M", "-bufsize", "3M", "-profile:v", "high",
+               "-level", "4.1", "-refs", "4", "-g", "60", "-keyint_min", "30", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "96k"]
+
+
+def build_reel(spec: Path, out: Path, copy: bool = False) -> None:
+    """spec: {"segments": [{"file": "...mp4", "start": 0, "end": 25, "fade_in": 0}, ...], "fade": 0.4}
+    copy=True keeps the 1.2.0 behaviour (stream-copy concat, two-entry edit list) instead of the final re-encode."""
     cfg = json.loads(spec.read_text())
     fade = float(cfg.get("fade", 0.4))
     # concat with stream copy needs identical streams; a mixed-size reel fails late with a cryptic error, so check first
@@ -233,7 +245,12 @@ def build_reel(spec: Path, out: Path) -> None:
         lst = tmp / "list.txt"
         lst.write_text("".join(f"file '{p}'\n" for p in parts))
         out.parent.mkdir(parents=True, exist_ok=True)
-        run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy", "-movflags", "+faststart", str(out)])
+        if copy:
+            run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy", "-movflags", "+faststart", str(out)])
+        else:
+            joined = tmp / "joined.mp4"
+            run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy", str(joined)])
+            run(["ffmpeg", "-y", "-v", "error", "-i", str(joined), *REEL_ENCODE, "-movflags", "+faststart", str(out)])
     print(json.dumps({"out": str(out), "seconds": round(probe_duration(out), 1), "parts": len(parts)}))
 
 
@@ -253,12 +270,13 @@ def main() -> None:
     r = sub.add_parser("reel")
     r.add_argument("spec", type=Path)
     r.add_argument("--out", type=Path, required=True)
+    r.add_argument("--copy", action="store_true", help="1.2.0 behaviour: stream-copy concat (QuickTime may stall mid-video)")
     a = ap.parse_args()
     if a.cmd == "clip":
         out = a.out or Path("clips") / (a.raw.stem + ".mp4")
         build_clip(a.raw, out, a.title, a.subtitle, a.start, a.end, not a.no_captions, a.tag, a.script)
     else:
-        build_reel(a.spec, a.out)
+        build_reel(a.spec, a.out, copy=a.copy)
 
 
 if __name__ == "__main__":
