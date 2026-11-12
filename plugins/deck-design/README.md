@@ -25,6 +25,9 @@ You can use them **independently or together**. They share design intent but hav
 | Reviewing a deck programmatically before ship | **deck-agent-team** (run `orchestrator.py`, dispatch critics, gate check) |
 | Inheriting an undocumented deck | **both** (mindset to learn what to look for, agent-team to surface violations) |
 | The deck must be a link (LinkedIn post, a page to send), or needs an English toggle | **deck-web** (template → capture → cover → English → deploy); **deck-build** for the pptx twin from the same coordinates |
+| A deck the reader reads without you (a written answer to questions) | **deck-mindset** `lessons.md` → "Written-answer decks" (important content on the slide, every promoted sentence checked) + **deck-build** QA loop |
+| Reusing a template's one content slide per section (e.g., a product feature map) | **deck-mindset** `lessons.md` → "Written-answer decks" (copy the shape tree, recolor per section) |
+| Upgrading a deck the presenter has edited by hand | **deck-mindset** `lessons.md` → "Process lessons" (build on a snapshot of their file, apply each edit to its kind, new filename) |
 | Building a non-pptx deck (Reveal.js / Marp / Figma) | **deck-mindset** rules apply directly; **deck-agent-team** orchestrator needs renderer adaptation |
 
 ## Origin
@@ -36,6 +39,8 @@ A second deck — 53 slides on the AWS black template (2026-09) — added templa
 The full case study lives in [skills/deck-mindset/examples/M1_case_study.md](skills/deck-mindset/examples/M1_case_study.md) — frequency data, what survived vs. didn't, and why.
 
 A third deck — 13 slides as one HTML page, Korean with an English toggle, published on CloudFront (2026-10) — added deck-web and its lessons in [skills/deck-web/reference/lessons.md](skills/deck-web/reference/lessons.md).
+
+A fourth deck — 39 slides answering a customer's architecture questions, built on a one-slide AWS template and then on the presenter's hand-edited copy (2026-11) — added the [written-answer lessons](skills/deck-mindset/lessons.md#written-answer-decks): who reads the deck sets the text budget, a sentence moved from the notes is a new claim to check, a template slide reused once per section, and how to upgrade a deck the presenter has edited.
 
 ## Quick start
 
@@ -234,7 +239,7 @@ The **architecture** (orchestrator → handoff → critics → synthesizer → g
 
 ## Versioning
 
-These skills are extracted from shipped decks — M1 (2026-05-23), the aurora-black session deck (2026-09-08) and a 12-slide build-up deck on a light template (2026-10). Treat the rules as *empirically validated on three decks*. The extract-after-ship discipline means everything in deck-mindset has at least one production-deck precedent. As more decks accumulate, the patterns either reinforce or get refined.
+These skills are extracted from shipped decks — M1 (2026-05-23), the aurora-black session deck (2026-09-08), a 12-slide build-up deck on a light template (2026-10) and a 39-slide written answer on an AWS template (2026-11). Treat the rules as *empirically validated on these decks*; each lesson names the deck it came from. The extract-after-ship discipline means everything in deck-mindset has at least one production-deck precedent. As more decks accumulate, the patterns either reinforce or get refined.
 
 If your usage discovers a pattern these skills don't cover, follow [skills/deck-mindset/layout_naming.md → "Building a new named layout"](skills/deck-mindset/layout_naming.md) or open an issue with concrete slide examples.
 

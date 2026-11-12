@@ -107,7 +107,7 @@ Headline lessons (full list, dated and with the evidence behind each: [lessons.m
 
 - **Let the template carry the chrome.** Build on its blank layout; code adds only the cite line — no bars, no logo, no page numbers.
 - **Three sizes per slide from the scale (e.g., 30/18/15) + the 10pt cite.** Hierarchy comes from weight and the single accent color.
-- **Text budget.** Title ≤ 26 chars (hard limit 34), ≤ 180 chars per content slide, ≤ 120 with a figure; what leaves the slide goes into the notes or the spoken track.
+- **Text budget.** Title ≤ 26 chars (hard limit 34), ≤ 180 chars per content slide, ≤ 120 with a figure; what leaves the slide goes into the notes or the spoken track. That budget is for a deck someone presents — a written answer the reader reads alone carries its important content on the slide (lessons: "Written-answer decks").
 - **One decision per turn, as an ASCII mock.** Show it, wait for approval, then change the code — and keep a glossary of rejected → approved terms.
 
 ## Related
