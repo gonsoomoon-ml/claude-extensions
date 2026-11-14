@@ -1,89 +1,39 @@
 # claude-extensions
 
-Claude Code를 효과적으로 사용하기 위한 가이드와 커스텀 스킬 모음입니다.
+Claude Code 플러그인 마켓플레이스(`gonsoomoon-extensions`)입니다. 슬라이드 덱, 포스팅용 인포그래픽, 데모 영상을 만드는 플러그인과 응답 형식을 정하는 플러그인이 들어 있습니다.
 
-## 가이드
+## 플러그인
 
-| 주제 | 설명 | 상태 |
+| 플러그인 | 만드는 것 | 구성 |
 |------|------|------|
-| [터미널 설치](docs/terminal-installation.md) | CLI 설치 및 Bedrock 연결 | 🚧 플레이스홀더 |
-| [VS Code 설치](docs/vscode-installation.md) | VS Code 확장 설치 및 Bedrock 연결 | ✅ |
-| [Settings Configuration](docs/settings-configuration.md) | settings.json 설정 (모델, 권한, 플러그인) | ✅ |
-| [Custom Skills](docs/custom-skills.md) | 커스텀 스킬 만들기 및 등록 | ✅ |
-| CLAUDE.md 활용 | 프로젝트별 지시사항, 메모리 시스템 | 예정 |
-| 워크플로우 팁 | 효율적인 프롬프팅, 슬래시 커맨드, 에이전트 활용 | 예정 |
-| 플러그인 & 훅 | 로컬 마켓플레이스, hooks 설정 | 예정 |
+| [deck-design](plugins/deck-design/README.md) | 발표용 슬라이드 덱. 디자인 규칙, .pptx 빌드, 링크로 여는 웹 덱, critic agent 검토 | 스킬 4개: deck-mindset · deck-build · deck-web · deck-agent-team |
+| [infographic-design](plugins/infographic-design/README.md) | LinkedIn·피드 포스팅에 붙이는 인포그래픽 PNG 1장 | 스킬 2개: infographic-mindset · infographic-build |
+| [demo-video](plugins/demo-video/README.md) | 웹 UI와 터미널 CLI 데모 영상, 자막, 하이라이트 릴 | 스킬 1개: recording-demo-videos |
+| [concise-response](plugins/concise-response/README.md) | 모든 세션에서 요약 먼저, 한국어로 응답 | SessionStart hook |
 
-## Quick Start
+기능, 필요한 환경, 버전별 변경은 각 플러그인 README 에 있습니다.
 
-### 0. VS Code 확장 설치 (Bedrock)
+### 설치
 
-VS Code 마켓플레이스에서 **Claude Code** 확장을 설치하고, `~/.claude/settings.json`에 Bedrock 설정을 추가합니다.
-
-```json
-{
-  "env": {
-    "CLAUDE_CODE_USE_BEDROCK": "1",
-    "AWS_REGION": "us-west-2"
-  }
-}
+```
+/plugin marketplace add gonsoomoon-ml/claude-extensions
+/plugin install deck-design@gonsoomoon-extensions
+/plugin install infographic-design@gonsoomoon-extensions
+/plugin install demo-video@gonsoomoon-extensions
+/plugin install concise-response@gonsoomoon-extensions
+/reload-plugins
 ```
 
-VS Code 설정에서 `claudeCode.disableLoginPrompt`를 활성화하면 불필요한 로그인 팝업을 끌 수 있습니다.
-
-→ [전체 설치 가이드](docs/vscode-installation.md)
-
-### 1. 권한 설정
-
-매번 승인 팝업 없이 작업하려면 `~/.claude/settings.json`에 permissions를 설정하세요.
-
-```json
-{
-  "permissions": {
-    "allow": ["Read", "Glob", "Grep", "Edit", "Write", "Bash(git status:*)", "Bash(ls:*)"]
-  }
-}
-```
-
-→ [전체 설정 가이드](docs/settings-configuration.md) | [예제 파일](examples/settings.json)
-
-### 2. 스킬 등록
-
-`~/.claude/skills/` 디렉토리에 스킬을 배치하면 Claude Code가 자동 인식합니다.
-
-```bash
-mkdir -p ~/.claude/skills/my-skill
-# SKILL.md 파일을 해당 디렉토리에 복사
-```
-
-→ [커스텀 스킬 가이드](docs/custom-skills.md)
-
-## 스킬 목록
+## 단독 스킬
 
 | 스킬 | 설명 |
 |------|------|
 | [aws-blog-table](skills/aws-blog-table/SKILL.md) | AWS 블로그용 스타일링된 HTML 테이블 생성 |
 
-## 플러그인 목록
+플러그인에 들어 있지 않으므로, 이 저장소를 클론한 뒤 저장소 루트에서 `~/.claude/skills/` 로 복사해서 씁니다.
 
-여러 스킬을 묶어서 함께 배포하는 플러그인입니다. `.claude-plugin/plugin.json` manifest 가 포함되어 있습니다.
-
-| 플러그인 | 포함된 스킬 | 설명 |
-|------|------|------|
-| [deck-design](plugins/deck-design/README.md) | deck-mindset · deck-build · deck-web · deck-agent-team | 슬라이드 데크 디자인 규칙 (5색 vocabulary · 15pt floor · 3-tier 위계 · 5 named layouts · 템플릿 프로필 aurora-black) + 빌드 도구 (토큰 · pptxgenjs/python-pptx 패턴 · 검증 → 렌더 → 확인 QA, 라틴 Amazon Ember + 한글 Noto) + Phase-2 검토용 critic agent team (visual / content / cognitive / compliance + synthesizer + gate) + 웹 덱 (deck-web: HTML 한 파일 · 클릭 빌드 · 발표자 노트 · 한\|EN 전환 · 캡처 넘침 검사 · S3+CloudFront 공개) |
-| [concise-response](plugins/concise-response/README.md) | — (SessionStart hook) | 모든 세션에서 요약 먼저·한국어로 응답: 짧은 요약(결론·핵심 bullet) → 필요한 세부만 → 상세는 요청할 때만. 영어 프롬프트에도 한국어로 답함(영어는 요청 시). output style 을 바꾸지 않고 덧붙이는 방식이라 다른 스타일과 함께 쓸 수 있음 |
-| [infographic-design](plugins/infographic-design/README.md) | infographic-mindset · infographic-build | LinkedIn·피드 포스팅용 인포그래픽 이미지 1장. 판단 기준 (3초 메시지 · 흐림 테스트 · 본문 글자 예산 · 문장 읽기 점검, 캔버스 4:5/3:2 와 16px 하한은 피드가 정함, 강조색 1종, 이미지와 본문의 분업) + 완성된 포스팅 이미지에서 뽑은 설계 도식 4종 (개념도·구조도 2단 / 질문+측정 카드+막대 / 긴장 헤드라인+구조 비교+실루엣 대응 / 정의 패널+대입) + 빌드 도구 (tokens.css · base.css · HTML/SVG 템플릿 4종 · Chromium 렌더+보고서+띠별 확대+읽는 순서 출력 · 넘침/글자 예산/최소 크기/연회색/강조색/hex/띠 간격/짧은 마지막 줄 린트 · 실제 렌더에서 나온 결함표 16가지) |
-| [demo-video](plugins/demo-video/README.md) | recording-demo-videos | 웹 UI 데모·링크드인 영상. 대본 규칙(인트로 카드 · 챕터 간지 · 합니다체 45자 자막 · 정리 카드) + Playwright 실시간 녹화 + 페이지 안 CSS 카메라로 선명한 확대 + ffmpeg 자막·카드 굽기 + 대기 구간 배속 + 여러 클립을 하이라이트 릴로 묶기. 직접 찍은 화면 녹화(.mov)에 자막만 입히기도 함. GUI 없는 리눅스에서 동작. hi-space/hi-aws-skills demo-video-recorder 1.2.0 포크(MIT) |
-
-이 레포 자체가 마켓플레이스(`gonsoomoon-extensions`)입니다.
-
-```
-/plugin marketplace add gonsoomoon-ml/claude-extensions
-/plugin install deck-design@gonsoomoon-extensions
-/plugin install concise-response@gonsoomoon-extensions
-/plugin install infographic-design@gonsoomoon-extensions
-/plugin install demo-video@gonsoomoon-extensions
-/reload-plugins
+```bash
+mkdir -p ~/.claude/skills && cp -r skills/aws-blog-table ~/.claude/skills/
 ```
 
 ## 함께 쓰는 외부 플러그인 (hi-aws-skills)
