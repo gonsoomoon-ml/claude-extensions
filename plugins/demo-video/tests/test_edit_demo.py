@@ -1,6 +1,7 @@
 """edit_demo.py: anchor resolution, speed, reel fades, temp-dir cleanup. Needs ffmpeg/ffprobe on PATH."""
 import importlib.util
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -320,3 +321,77 @@ def test_a_box_that_can_never_show_stops_the_clip_before_ffmpeg(tmp_path, privat
         clip_of(tmp_path, video, [{**beat, "text": "late", "box": BOX}])
     assert seen == [], "ffmpeg never starts"
     assert str(stop.value).startswith("box ") and words in str(stop.value) and "'late'" in str(stop.value)
+
+
+# ---------------------------------------------------------------- a box with a length of its own ("box_dur")
+
+LATER_SHOT = [{"t": 0.5, "kind": "shot", "key": "hero"}, {"t": 6.0, "kind": "shot", "key": "later"}]
+HELD = {"at": 2.0, "text": "stay", "box": BOX, "box_delay": 0.5, "hold": True}   # caption 2 s to the clip's end (10 s)
+CAPTION_EDGE = (86, 918)   # inside the caption's blue box, left of its text
+
+
+def is_caption_blue(p):
+    return p[2] > 170 and p[0] < 100
+
+
+@needs_ffmpeg
+def test_box_dur_ends_a_held_box_before_a_later_camera_shot(tmp_path, private_tmp):
+    """The box shows 2.5-4.5 s ("box_delay" 0.5, "box_dur" 2), the camera moves at 6 s, the caption stays to the end."""
+    video = grey_take(tmp_path, LATER_SHOT)
+    out = clip_of(tmp_path, video, [{**HELD, "box_dur": 2.0}])
+    assert is_red(pixel(out, *BORDER, at=3.5, tmp=tmp_path)), "inside the box's time"
+    assert not is_red(pixel(out, *BORDER, at=5.0, tmp=tmp_path)), "after box_dur"
+    assert not is_red(pixel(out, *BORDER, from_end=0.1, tmp=tmp_path)), "the box is gone on the last frame"
+    assert is_caption_blue(pixel(out, *CAPTION_EDGE, from_end=0.1, tmp=tmp_path)), "the held caption is on the last frame"
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("extra, shows, advice", [
+    ({}, "2.50-10.00 s", "shorten the caption or move the box"),               # without box_dur: as before
+    ({"box_dur": 4.0}, "2.50-6.50 s", 'shorten "box_dur" or move the box'),    # a box_dur that still reaches the shot
+])
+def test_a_held_box_that_reaches_the_later_shot_stops_the_clip(tmp_path, private_tmp, monkeypatch, extra, shows, advice):
+    video = grey_take(tmp_path, LATER_SHOT)
+    seen = _commands(monkeypatch)
+    with pytest.raises(SystemExit) as stop:
+        clip_of(tmp_path, video, [{**HELD, **extra}])
+    assert seen == [], "ffmpeg never starts"
+    assert str(stop.value) == (f"the camera moves to shot 'later' at 6.00 s while the box of 'stay' shows ({shows}): "
+                               f"{advice}")
+
+
+@needs_ffmpeg
+def test_a_box_dur_that_ends_with_its_caption_draws_what_no_box_dur_draws(tmp_path, private_tmp, monkeypatch):
+    """At 1.25x the box's end (start + box_dur) comes out a little after the caption's end: it is that end, not past it."""
+    assert 2.0 / 1.25 + 0.3 + 2.7 > 2.0 / 1.25 + 3, "the float rounding this test is about"
+    video = grey_take(tmp_path, [{"t": 0.5, "kind": "shot", "key": "hero"}])
+    seen = _commands(monkeypatch)
+    beat = {"at": 2.0, "dur": 3, "text": "to the end", "box": BOX, "box_delay": 0.3}   # caption 1.6-4.6 s, box from 1.9 s
+    for extra in ({}, {"box_dur": 2.7}):
+        script = tmp_path / "story.json"
+        script.write_text(json.dumps({"speed": 1.25, "start": 0, "beats": [{**beat, **extra}]}))
+        edit_demo.build_clip(video, tmp_path / "grey.mp4", None, None, None, None, True, None, script)
+    without, with_dur = (cmd[cmd.index("-vf") + 1] for cmd in seen)
+    assert "between(t\\,1.90\\,4.60)" in without
+    assert re.sub(r"edit-\w+", "", with_dur) == re.sub(r"edit-\w+", "", without)
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("beat, words", [
+    ({"at": 2.0, "dur": 3, "box": BOX, "box_delay": 1.0, "box_dur": 2.5}, ["5.50 s", "5.00 s"]),  # box 3.0-5.5, caption to 5.0
+    ({"at": 6.0, "box": BOX, "hold": True, "box_dur": 5}, ["11.00 s", "10.00 s"]),            # held: the clip ends at 10 s
+    ({"at": 2.0, "box": BOX, "box_dur": 0}, ["above 0"]),
+    ({"at": 2.0, "box": BOX, "box_dur": -1}, ["above 0"]),
+    ({"at": 2.0, "box": BOX, "box_dur": "2"}, ["above 0", "'2'"]),
+    ({"at": 2.0, "box": BOX, "box_dur": True}, ["above 0"]),
+    ({"at": 2.0, "box_dur": 2}, ["no box"]),
+])
+def test_a_wrong_box_dur_stops_the_clip_before_ffmpeg_with_one_line(tmp_path, private_tmp, monkeypatch, beat, words):
+    video = grey_take(tmp_path, [{"t": 0.5, "kind": "shot", "key": "hero"}])
+    seen = _commands(monkeypatch)
+    with pytest.raises(SystemExit) as stop:
+        clip_of(tmp_path, video, [{**beat, "text": "late"}])
+    message = str(stop.value)
+    assert seen == [], "ffmpeg never starts"
+    assert "\n" not in message and "box_dur" in message and "'late'" in message, message
+    assert all(w in message for w in words), message

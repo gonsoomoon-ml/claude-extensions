@@ -44,10 +44,11 @@ Script JSON:
    ]}
   Highlight boxes (1.4.0): a beat may add "box": [x, y, w, h] | [[x, y, w, h], ...] | "shot:<key>[#n]" | "mark:<key>[#n]"
   (frame pixels; the last two use the camlog entry's rect, grown by the border + 4 px). A red border (8 px, a dark line
-  outside it) shows from the caption's start + "box_delay" (default 1.4 / speed + 0.2 s on a "shot:" anchor, else 0) to its end.
-  "hold": true on the LAST beat keeps its caption and boxes to the clip's last frame with no fade-out. A box under the
-  caption, outside the frame, with a camera move (a camlog shot) while it shows, or that can never show (its delay
-  outlasts its caption) stops the clip before ffmpeg starts.
+  outside it) shows from the caption's start + "box_delay" (default 1.4 / speed + 0.2 s on a "shot:" anchor, else 0) to its end,
+  or for "box_dur" seconds of the clip from its start (a number above 0; the box must not outlast its caption).
+  "hold": true on the LAST beat keeps its caption and boxes to the clip's last frame with no fade-out ("box_dur" can end
+  the boxes sooner). A box under the caption, outside the frame, with a camera move (a camlog shot) while it shows, or
+  that can never show (its delay outlasts its caption) stops the clip before ffmpeg starts.
   Beat duration defaults to the gap to the next beat (max 7 s, min 1.5 s). `#n` counts occurrences of that
   same key / substring / kind only. Raw seconds are seconds from launch and are not validated against the
   camlog. A context fact with no event of its own (a batch statistic, a caveat) belongs on a late summary
@@ -192,6 +193,17 @@ def box_delay(beat: dict, speed: float) -> float:
     return CAMERA_MOVE / speed + 0.2 if str(beat.get("at", "")).startswith("shot:") else 0.0
 
 
+def box_dur(beat: dict) -> float | None:
+    """Seconds of the clip a beat's boxes show, counted from their start ("box_dur"); None without it: they show until
+    the caption ends. Stops unless it is a number above 0."""
+    if "box_dur" not in beat:
+        return None
+    value = beat["box_dur"]
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not value > 0:
+        raise SystemExit(f"box_dur on beat {beat['text']!r} must be a number of seconds above 0, not {value!r}")
+    return float(value)
+
+
 def caption_band(pos: str | None) -> tuple[int, int]:
     """Top and bottom y of the beat caption's box ("top" or the lower third), one line of text."""
     y = BEAT_Y_TOP if pos == "top" else BEAT_Y_BOTTOM
@@ -215,13 +227,20 @@ def beat_layout(beats: list[dict], log: list[dict], *, start: float, end: float,
 
     The beats in time order, each {"beat": the beat, "caption": (start, end) in clip seconds, or None when the caption
     has under 1 s of room and is left out, "boxes": [(x, y, w, h), ...], "box": (start, end) in clip seconds while the
-    boxes show, "box_raw": the same in the take's seconds (start + t * speed); both None without boxes}. Stops on a
-    box outside the frame, a hold on a beat that is not the last, a box that can never show, a box under its
-    caption's band, and a camera move (a camlog shot) while a box shows.
+    boxes show (from the caption's start + box_delay to the caption's end, or for box_dur seconds), "box_raw": the
+    same in the take's seconds (start + t * speed); both None without boxes}. Stops on a box outside the frame, a
+    box_dur that is not a number above 0 or has no box, a hold on a beat that is not the last, a box that can never
+    show, a box_dur that runs past its caption's end, a box under its caption's band, and a camera move (a camlog
+    shot) while a box shows.
     """
     rel = lambda t: (t - start) / speed  # noqa: E731
     timed = sorted(((rel(script_time(b["at"], log) + float(b.get("offset", 0))), b) for b in beats), key=lambda x: x[0])
     boxes = [beat_boxes(b, log) for _, b in timed]  # every box's frame check comes first
+    for (_, b), rects in zip(timed, boxes):
+        if "box_dur" in b and not rects:
+            raise SystemExit(f"box_dur on beat {b['text']!r} has no box to end: give the beat a \"box\" or leave "
+                             f"\"box_dur\" out")
+    lengths = [box_dur(b) for _, b in timed]
     for _, b in timed[:-1]:
         if b.get("hold"):
             raise SystemExit(f"hold on beat {b['text']!r} is not allowed: only the clip's last beat can be held")
@@ -244,17 +263,25 @@ def beat_layout(beats: list[dict], log: list[dict], *, start: float, end: float,
         if b0 >= t1:
             raise SystemExit(f"box of {b['text']!r} can never show: it waits {b0 - t0:.2f} s (box_delay) and its caption "
                              f"lasts {t1 - t0:.2f} s; shorten \"box_delay\" or lengthen the caption")
+        b1 = t1 if lengths[i] is None else b0 + lengths[i]
+        if round(b1 - t1, 6) > 0:  # compared to the microsecond: a box_dur written to the caption's end is that end
+            ends = "its held caption ends with the clip at" if b.get("hold") else "its caption ends at"
+            raise SystemExit(f"box_dur on beat {b['text']!r} runs past its caption: the box shows from {b0:.2f} s and "
+                             f"would end at {b1:.2f} s of the clip, {ends} {t1:.2f} s; shorten \"box_dur\" to "
+                             f"{t1 - b0:.2f} s or less")
+        b1 = min(b1, t1)
         band = caption_band(b.get("pos"))
         for r in boxes[i]:
             if r[1] < band[1] and r[1] + r[3] > band[0]:
                 raise SystemExit(f"box {list(r)} crosses the caption band y {band[0]}-{band[1]} (pos={b.get('pos') or 'bottom'}): "
                                  f"move the box or set \"pos\" to the other edge")
-        lo, hi = start + b0 * speed, start + t1 * speed  # the box's time in the take's seconds
+        lo, hi = start + b0 * speed, start + b1 * speed  # the box's time in the take's seconds
+        shorten = "the caption" if lengths[i] is None else "\"box_dur\""
         for e in shots:
             if lo + CAMERA_MARGIN < e["t"] < hi - CAMERA_MARGIN:
                 raise SystemExit(f"the camera moves to shot {e.get('key')!r} at {e['t']:.2f} s while the box of "
-                                 f"{b['text']!r} shows ({lo:.2f}-{hi:.2f} s): shorten the caption or move the box")
-        item.update(box=(b0, t1), box_raw=(lo, hi))
+                                 f"{b['text']!r} shows ({lo:.2f}-{hi:.2f} s): shorten {shorten} or move the box")
+        item.update(box=(b0, b1), box_raw=(lo, hi))
     return layout
 
 

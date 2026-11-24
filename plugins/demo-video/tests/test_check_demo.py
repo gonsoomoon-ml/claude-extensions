@@ -446,6 +446,26 @@ def test_boxes_reads_a_smaller_take_as_the_clip_scales_it(tmp_path):
     assert "crosses" in on_stripe["flags"] and beside["flags"] == []
 
 
+@needs_ffmpeg
+def test_boxes_ends_a_box_where_its_box_dur_ends(tmp_path):
+    """A held box at 2x: without "box_dur" it lasts to the clip's end and its last frame holds the block that appears
+    at 6 s of the take; with "box_dur" 1 its times end 1 s of the clip after its start and its last frame is read there."""
+    take = make_take(tmp_path / "take.webm", LATE_BLOCK)
+    beat = {"at": 2.0, "text": "look", "box": BOX, "box_delay": 0.5, "hold": True}   # the box starts at 1.5 s of the clip
+    found = {}
+    for name, extra in (("held", {}), ("ended", {"box_dur": 1.0})):
+        script = tmp_path / f"{name}.json"
+        script.write_text(json.dumps({"speed": 2, "start": 0, "beats": [{**beat, **extra}]}))
+        done = cli("boxes", script, "--raw", take, "--out", tmp_path / f"{name}.boxes.json")
+        assert done.returncode == 0, done.stderr
+        (found[name],) = json.loads((tmp_path / f"{name}.boxes.json").read_text())["boxes"]
+    held, ended = found["held"], found["ended"]
+    assert held["clip"] == pytest.approx([1.5, 5.0], abs=0.01) and held["raw"] == pytest.approx([3.0, 10.0], abs=0.01)
+    assert "moved" in held["flags"]
+    assert ended["clip"] == pytest.approx([1.5, 1.5 + 1.0], abs=1e-3) and ended["raw"] == pytest.approx([3.0, 5.0], abs=1e-3)
+    assert ended["change"] < 1 and "moved" not in ended["flags"], "the last frame is the box's last moment, before 6 s"
+
+
 # ---------------------------------------------------------------- sheet
 
 @needs_ffmpeg
