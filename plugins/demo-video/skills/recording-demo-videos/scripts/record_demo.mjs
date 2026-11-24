@@ -46,13 +46,14 @@ const { chromium } = createRequire(path.join(pwRoot, 'package.json'))('playwrigh
 // pixels, so a smaller viewport with deviceScaleFactor > 1 lands top-left in the frame with blank margins.
 const W = 1920, H = 1080;
 const Z = W / LW;  // html zoom; 1 for the default layout
+const CAMERA_MOVE = 1.4;  // seconds a camera move takes unless a shot gives its own dur (edit_demo.py CAMERA_MOVE)
 
 // ---------------------------------------------------------------- camera (runs inside the page)
 const CAMERA_JS = `
 (() => {
   if (window.__cam) return;
   const style = document.createElement('style');
-  style.textContent = 'html{overflow:hidden!important;background:#0b0f14}body{overflow:visible!important;transform-origin:0 0;transition:transform var(--cam-dur,1.4s) cubic-bezier(.5,0,.15,1);will-change:transform}::-webkit-scrollbar{display:none}';
+  style.textContent = 'html{overflow:hidden!important;background:#0b0f14}body{overflow:visible!important;transform-origin:0 0;transition:transform var(--cam-dur,${CAMERA_MOVE}s) cubic-bezier(.5,0,.15,1);will-change:transform}::-webkit-scrollbar{display:none}';
   document.head.appendChild(style);
   // Layout px: the frame is W x H visual px, but with html zoom Z the page is laid out at W/Z x H/Z and every
   // camera number (rects, translate, pad) lives in that space. getBoundingClientRect returns visual px (already
@@ -61,6 +62,7 @@ const CAMERA_JS = `
   if (Z !== 1) document.documentElement.style.zoom = String(Z);
   const state = { x: 0, y: 0, k: 1 };
   let target = null;  // the last focus/region: where its target truly lies on the page (rect) and the body's box (o)
+  let move = ${CAMERA_MOVE};  // seconds the last move takes
   const pageSize = () => ({ w: Math.max(document.body.offsetWidth, W), h: Math.max(document.body.offsetTop + document.body.offsetHeight, H) });
   // A measured place in 1/64 px, the layout's own unit: client rects come in float32 and pass through the inverted
   // transform, and that noise would decide which way an edge that maps to a whole pixel is rounded.
@@ -93,7 +95,8 @@ const CAMERA_JS = `
     k = Math.max(1, Math.min(k, 2.6));
     x = Math.max(0, Math.min(x, page.w - W / k));
     y = Math.max(0, Math.min(y, page.h - H / k));
-    document.body.style.setProperty('--cam-dur', (dur ?? 1.4) + 's');
+    move = dur ?? ${CAMERA_MOVE};
+    document.body.style.setProperty('--cam-dur', move + 's');
     document.body.style.transform = 'scale(' + k + ') translate(' + (-x) + 'px,' + (-y) + 'px)';
     Object.assign(state, { x, y, k });
     return { x, y, k };
@@ -131,6 +134,7 @@ const CAMERA_JS = `
   const region = (x, y, w, h, opts = {}) => fitRect({ x, y, w, h }, opts);
   const reset = dur => apply(0, 0, 1, dur);
   const targetRect = () => (target ? frameRect(target.rect, target.o) : null);   // reads nothing of the page
+  const lastMove = () => move;
   // The element's rect for a mark: { found: false } when nothing matches (or it has no size), else { rect }.
   const mark = (selector, index = 0) => {
     const el = document.querySelectorAll(selector)[index];
@@ -138,7 +142,7 @@ const CAMERA_JS = `
     return !r || r.w < 2 || r.h < 2 ? { found: false } : { found: true, rect: frameRect(r) };
   };
   const rect = selector => { const el = document.querySelector(selector); return el ? untransformed(el) : null; };
-  window.__cam = { focus, region, reset, rect, apply, state, pageSize, frameRect, targetRect, mark, fromClient };
+  window.__cam = { focus, region, reset, rect, apply, state, pageSize, frameRect, targetRect, lastMove, mark, fromClient };
 })();`;
 
 // Playwright's click()/fill() scroll the target into view, which fights the camera transform. Dispatch instead.
@@ -155,8 +159,13 @@ class Recorder {
     // null = selector matched nothing (or a 0-size element): the camera did not move. Say so loudly; a silent
     // no-op here means a whole take with the wrong framing.
     const missing = result === null;
-    const rect = result && result.k !== undefined ? await this.page.evaluate('window.__cam.targetRect()').catch(() => null) : null;
-    this.note('shot', { key, label, camera: result, ...(rect ? { rect } : {}), ...(missing ? { missing: true } : {}) }, t);
+    // where the target lies once the camera stops, and how long the move takes: written only when not the default,
+    // so the clip step's camera check knows when this camera stops
+    const [rect, move] = result && result.k !== undefined
+      ? await this.page.evaluate('[window.__cam.targetRect(), window.__cam.lastMove()]').catch(() => [null, CAMERA_MOVE])
+      : [null, CAMERA_MOVE];
+    this.note('shot', { key, label, camera: result, ...(rect ? { rect } : {}), ...(move !== CAMERA_MOVE ? { move } : {}),
+                        ...(missing ? { missing: true } : {}) }, t);
     if (missing) console.warn(`[${this.now().toFixed(1)}s] shot ${key}: selector matched nothing, camera unchanged`);
     else console.log(`[${this.now().toFixed(1)}s] shot ${key}${label ? ' — ' + label : ''}`);
     return result;
@@ -167,9 +176,10 @@ class Recorder {
   async region(key, x, y, w, h, opts = {}, label) { return this.shot(key, `window.__cam.region(${x},${y},${w},${h},${JSON.stringify(opts)})`, label); }
   /** Say where an element is on the frame as the camera shows it (or will: a move under way counts as made), moving
    *  nothing. Writes a "mark" entry with "rect"; no match → missing: true, a warning, and null (a selector that is not
-   *  CSS: the same, with the browser's error in the entry's "error" and in the warning). */
+   *  CSS: the same, with the browser's error in the entry's "error" and in the warning). The label comes third (focus
+   *  takes its options there), the index among several matches fourth. */
   async mark(key, selector, label, index = 0) {
-    const found = await this.page.evaluate(`window.__cam.mark(${JSON.stringify(selector)}, ${index})`)
+    const found = await this.page.evaluate(`window.__cam.mark(${JSON.stringify(selector)}, ${Number(index)})`)
       .catch(error => ({ error: String(error).split('\n')[0] }));
     if (found?.error) return this.markRect(key, null, label, `selector ${selector}: ${found.error}`, found.error);
     return this.markRect(key, found?.found ? found.rect ?? undefined : null, label, `selector ${selector} matched nothing`);

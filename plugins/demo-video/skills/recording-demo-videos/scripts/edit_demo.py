@@ -47,8 +47,10 @@ Script JSON:
   outside it) shows from the caption's start + "box_delay" (default 1.4 / speed + 0.2 s on a "shot:" anchor, else 0) to its end,
   or for "box_dur" seconds of the clip from its start (a number above 0; the box must not outlast its caption).
   "hold": true on the LAST beat keeps its caption and boxes to the clip's last frame with no fade-out ("box_dur" can end
-  the boxes sooner). A box under the caption, outside the frame, with a camera move (a camlog shot) while it shows, or
-  that can never show (its delay outlasts its caption) stops the clip before ffmpeg starts.
+  the boxes sooner). A box under the caption, outside the frame, that can never show (its delay outlasts its caption),
+  or that shows while the camera moves stops the clip before ffmpeg starts: a camlog shot moves the camera from its
+  time for its "move" seconds (1.4 when the camlog does not say), unless its camera values equal the shot's before.
+  For a script that uses a box or a hold, each caption's and box's time in the clip is printed on stderr.
   Beat duration defaults to the gap to the next beat (max 7 s, min 1.5 s). `#n` counts occurrences of that
   same key / substring / kind only. Raw seconds are seconds from launch and are not validated against the
   camlog. A context fact with no event of its own (a batch statistic, a caveat) belongs on a late summary
@@ -90,13 +92,18 @@ DEFAULT_SPEED = 1.25  # a demo at real time drags; 1.25x reads as a confident pa
 BEAT_BOX = os.environ.get("DEMO_BEAT_BOX", "0x1f6feb@0.82")
 BEAT_SIZE = 34
 BEAT_BORDER = 18
-BEAT_Y_BOTTOM, BEAT_Y_TOP = H - 150, 120   # caption y (the drawtext y expressions "h-150" and "120")
+BEAT_Y_BOTTOM, BEAT_Y_TOP = H - 150, 120   # caption y; caption_y() writes them as drawtext takes them, "h-150" and "120"
+NEW_BEAT_FIELDS = ("box", "box_delay", "box_dur", "hold")   # 1.4.0; a script with none of them prints as in 1.3.0
 # highlight boxes (1.4.0): a red border with a thin dark line just outside it, so the box shows on red or orange UIs too
 HIGHLIGHT = os.environ.get("DEMO_HIGHLIGHT", "0xff2a2a@0.95")
 HIGHLIGHT_THICK = int(os.environ.get("DEMO_HIGHLIGHT_THICK", "8"))
 HIGHLIGHT_OUTLINE = 2
 CAMERA_MOVE = 1.4  # seconds the recorder's camera takes to arrive on a shot (raw time)
 CAMERA_MARGIN = 0.001  # raw seconds: a box's times come back from clip seconds with float rounding (a beat's own shot)
+CAMERA_SAME_PX, CAMERA_SAME_ZOOM = 0.01, 1e-4   # camera values this close are one view (a shot that moves nothing)
+# the end written into the filter of what stays to the clip's last frame (the tag, a held caption and the boxes that end
+# with it): that frame sits on a 1/30 s slot that can lie past the clip's stated end, which the filter writes to 0.01 s
+PAST_THE_END = 10_000
 
 
 def run(cmd: list[str]) -> None:
@@ -129,7 +136,8 @@ def drawtext(textfile: Path, *, font: str, size: int, x: str, y: str, start: flo
 
 def script_time(at, log: list[dict]) -> float:
     """Resolve a beat anchor to raw seconds. Forms: number | 'shot:<key>[#n]' | 'mark:<key>[#n]' |
-    'caption:<substring>[#n]' | 'note:<kind>[#n]' | '<kind>[#n]' (any camlog kind, e.g. 'scene_end', 'play')."""
+    'caption:<substring>[#n]' | 'note:<kind>[#n]' | '<kind>[#n]' (any camlog kind, e.g. 'scene_end', 'play').
+    A 'mark' without a key matches every entry of kind mark, as in 1.3.0 (rec.note('mark'))."""
     if isinstance(at, (int, float)):
         return float(at)
     spec, _, nth = str(at).partition("#")
@@ -137,7 +145,7 @@ def script_time(at, log: list[dict]) -> float:
     kind, _, arg = spec.partition(":")
     if kind == "note":
         kind, arg = arg, ""
-    if kind in ("shot", "mark"):
+    if kind == "shot" or (kind == "mark" and arg):
         hits = [e for e in log if e["kind"] == kind and e.get("key") == arg]
     elif kind == "caption":
         hits = [e for e in log if e["kind"] == "caption" and arg in e.get("text", "")]
@@ -204,6 +212,38 @@ def box_dur(beat: dict) -> float | None:
     return float(value)
 
 
+def same_view(a, b) -> bool:
+    """Two camlog camera values {x, y, k} that frame the same view: focusing one element again gives its numbers back
+    with float noise (1e-4 px seen), which no frame shows."""
+    try:
+        return (abs(a["x"] - b["x"]) <= CAMERA_SAME_PX and abs(a["y"] - b["y"]) <= CAMERA_SAME_PX
+                and abs(a["k"] - b["k"]) <= CAMERA_SAME_ZOOM)
+    except (TypeError, KeyError):
+        return False
+
+
+def camera_moves(log: list[dict]) -> list[tuple[dict, float, float]]:
+    """The camera's moves in a camlog, as (shot, from, to) in the take's seconds. A shot moves the camera from its time
+    for its "move" seconds (the recorder writes them for a shot of its own length), else CAMERA_MOVE; a shot whose
+    selector matched nothing ("missing") or whose camera values equal the previous shot's (same_view) moves nothing."""
+    moves, before = [], None
+    for e in log:
+        if e["kind"] != "shot" or e.get("missing"):
+            continue
+        camera = e.get("camera")
+        if not same_view(camera, before):
+            t = float(e["t"])
+            moves.append((e, t, t + float(e.get("move", CAMERA_MOVE))))
+        before = camera
+    return moves
+
+
+def caption_y(pos: str | None) -> str:
+    """The beat caption's y as the drawtext filter takes it: BEAT_Y_TOP with "pos": "top", else BEAT_Y_BOTTOM counted
+    from the frame's bottom ("120", "h-150")."""
+    return str(BEAT_Y_TOP) if pos == "top" else f"h-{H - BEAT_Y_BOTTOM}"
+
+
 def caption_band(pos: str | None) -> tuple[int, int]:
     """Top and bottom y of the beat caption's box ("top" or the lower third), one line of text."""
     y = BEAT_Y_TOP if pos == "top" else BEAT_Y_BOTTOM
@@ -230,8 +270,8 @@ def beat_layout(beats: list[dict], log: list[dict], *, start: float, end: float,
     boxes show (from the caption's start + box_delay to the caption's end, or for box_dur seconds), "box_raw": the
     same in the take's seconds (start + t * speed); both None without boxes}. Stops on a box outside the frame, a
     box_dur that is not a number above 0 or has no box, a hold on a beat that is not the last, a box that can never
-    show, a box_dur that runs past its caption's end, a box under its caption's band, and a camera move (a camlog
-    shot) while a box shows.
+    show, a box_dur that runs past its caption's end, a box under its caption's band, and a box that shows while the
+    camera moves (camera_moves: from a shot's time until the camera stops), whatever the beat is anchored to.
     """
     rel = lambda t: (t - start) / speed  # noqa: E731
     timed = sorted(((rel(script_time(b["at"], log) + float(b.get("offset", 0))), b) for b in beats), key=lambda x: x[0])
@@ -244,7 +284,7 @@ def beat_layout(beats: list[dict], log: list[dict], *, start: float, end: float,
     for _, b in timed[:-1]:
         if b.get("hold"):
             raise SystemExit(f"hold on beat {b['text']!r} is not allowed: only the clip's last beat can be held")
-    shots = [e for e in log if e["kind"] == "shot"]
+    moves = camera_moves(log)
     layout = []
     for i, (t0, b) in enumerate(timed):
         t0 = max(t0, 4.4 if title else 0.2 if speed == 1 else 0.0)  # never under the title card
@@ -282,10 +322,21 @@ def beat_layout(beats: list[dict], log: list[dict], *, start: float, end: float,
             advice = 'give the box a "box_dur" or move the box'  # a held caption cannot be shortened
         else:
             advice = "shorten the caption or move the box"
-        for e in shots:
-            if lo + CAMERA_MARGIN < e["t"] < hi - CAMERA_MARGIN:
-                raise SystemExit(f"the camera moves to shot {e.get('key')!r} at {e['t']:.2f} s while the box of "
-                                 f"{b['text']!r} shows ({lo:.2f}-{hi:.2f} s): {advice}")
+        for e, moved, stops in moves:
+            if moved < hi - CAMERA_MARGIN and stops > lo + CAMERA_MARGIN:
+                # the box_delay that starts the box as the camera stops, rounded up to 0.01 s
+                wait = math.ceil(((stops - start) / speed - t0) * 100 - 1e-6) / 100
+                fits = t0 + wait < t1
+                if moved <= lo + CAMERA_MARGIN:   # the box would start while the camera is still on its way
+                    raise SystemExit(
+                        f"the camera is still moving to shot {e.get('key')!r} (from {moved:.2f} s, it stops at "
+                        f"{stops:.2f} s) when the box of {b['text']!r} starts (it shows {lo:.2f}-{hi:.2f} s): "
+                        + (f'start the box after the camera stops with "box_delay": {wait:.2f}' if fits else
+                           "its caption ends before the camera stops: anchor the beat later or lengthen its caption"))
+                raise SystemExit(f"the camera moves to shot {e.get('key')!r} at {moved:.2f} s (it stops at {stops:.2f} s) "
+                                 f"while the box of {b['text']!r} shows ({lo:.2f}-{hi:.2f} s): {advice}"
+                                 + (f', or start the box after the camera stops with "box_delay": {wait:.2f}'
+                                    if fits else ""))
         item.update(box=(b0, b1), box_raw=(lo, hi))
     return layout
 
@@ -336,24 +387,34 @@ def _encode_clip(raw: Path, out: Path, title, subtitle, tag, start: float, end: 
             filters.append(drawtext(tmp / "subtitle.txt", font=FONT_REG, size=30, x="96", y="h-170", start=0.5, end=4.2))
     if tag:
         (tmp / "tag.txt").write_text(tag)
-        filters.append(drawtext(tmp / "tag.txt", font=FONT_MONO, size=22, x="w-tw-40", y="h-58", start=0, end=10_000,
+        filters.append(drawtext(tmp / "tag.txt", font=FONT_MONO, size=22, x="w-tw-40", y="h-58", start=0, end=PAST_THE_END,
                                 color="0xcfd8dc", alpha_fade=False))
     if story and story.get("beats"):
+        # the times in the finished clip, for a reel's voice_at; printed for a script that uses a 1.4.0 field only
+        times = any(k in b for b in story["beats"] for k in NEW_BEAT_FIELDS)
         for i, item in enumerate(beat_layout(story["beats"], log, start=start, end=end, speed=speed, title=title)):
             b = item["beat"]
             if item["caption"] is None:
                 print(f"skip beat (no room): {b['text']!r}", file=sys.stderr)
                 continue
             t0, t1 = item["caption"]
+            if times:
+                n = next(n for n, x in enumerate(story["beats"], 1) if x is b)
+                where = f", box {item['box'][0]:.2f}-{item['box'][1]:.2f} s" if item["box"] else ""
+                print(f"clip: beat {n}: caption {t0:.2f}-{t1:.2f} s{where}: {b['text']!r}", file=sys.stderr)
             f = tmp / f"beat{i}.txt"
             f.write_text(b["text"])
-            y = "120" if b.get("pos") == "top" else "h-150"  # pos=top when the lower third would cover the evidence
+            y = caption_y(b.get("pos"))  # pos=top when the lower third would cover the evidence
+            held = bool(b.get("hold"))  # its caption, and the boxes that end with it, stay to the clip's very last frame
             # one look for every beat ("style": "insight" is accepted for old scripts and renders the same)
-            filters.append(drawtext(f, font=FONT_BOLD, size=BEAT_SIZE, x="96", y=y, start=t0, end=t1, color="0xffffff",
-                                    fade_out=not b.get("hold")))
+            filters.append(drawtext(f, font=FONT_BOLD, size=BEAT_SIZE, x="96", y=y, start=t0,
+                                    end=PAST_THE_END if held else t1, color="0xffffff", fade_out=not held))
             placed += 1
-            for r in item["boxes"]:
-                filters += drawbox(r, start=item["box"][0], end=item["box"][1])
+            if item["boxes"]:
+                b0, b1 = item["box"]
+                b1 = PAST_THE_END if held and round(t1 - b1, 6) == 0 else b1
+                for r in item["boxes"]:
+                    filters += drawbox(r, start=b0, end=b1)
     elif captions:
         labelled = [s for s in shots if s.get("label") and rel(s["t"]) > 4.6]
         for i, shot in enumerate(labelled):
@@ -364,7 +425,8 @@ def _encode_clip(raw: Path, out: Path, title, subtitle, tag, start: float, end: 
                 continue
             f = tmp / f"cap{i}.txt"
             f.write_text(shot["label"])
-            filters.append(drawtext(f, font=FONT_BOLD, size=BEAT_SIZE, x="96", y="h-150", start=t0, end=t1, color="0xffffff"))
+            filters.append(drawtext(f, font=FONT_BOLD, size=BEAT_SIZE, x="96", y=caption_y(None), start=t0, end=t1,
+                                    color="0xffffff"))
             placed += 1
     vf = ",".join(filters)
     out.parent.mkdir(parents=True, exist_ok=True)

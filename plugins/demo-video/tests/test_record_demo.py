@@ -123,7 +123,8 @@ MARK_STORYBOARD = """export default async function storyboard({ page, rec, siteU
   await rec.mark('after', '#green', 'green once the camera has stopped');
   await rec.mark('absent', '#nothing-here', 'matches nothing');
   await rec.mark('outside', '#far', 'a block the camera does not show');
-  await rec.region('area', 300, 200, 360, 130, { pad: 20 }, 'a region');
+  await rec.mark('swapped', '#green', {}, 'options where the label goes');   // mark takes its label third
+  await rec.region('area', 300, 200, 360, 130, { pad: 20, dur: 0.6 }, 'a region');
   await rec.sleep(2200);
   rec.note('done');
 }"""
@@ -178,6 +179,11 @@ def test_camlog_rects_enclose_what_the_frame_shows(tmp_path, layout):
     assert area["kind"] == "shot"
     r0, g0 = bounds(video, area["t"] + 2.0, tmp_path, "red"), bounds(video, area["t"] + 2.0, tmp_path, "green")
     assert_encloses(area["rect"], (r0[0], r0[1], g0[2], g0[3]))   # the region's rectangle holds both blocks, edge to edge
+    # an index in the label's place is a number, not page code: the mark is missing, with no browser error
+    swapped = by_key["swapped"]
+    assert swapped["kind"] == "mark" and swapped["missing"] is True and "error" not in swapped, swapped
+    # a shot of its own move length says so, for the clip step's camera check; one of the default length does not
+    assert area["move"] == 0.6 and "move" not in red and "move" not in by_key["wide"]
 
 
 ROWS_PAGE = """<!doctype html><html><head><style>
@@ -257,7 +263,7 @@ MARGIN_STORYBOARD = """export default async function storyboard({ page, rec, sit
   // a camera move of the storyboard's own, with every page call answered 0.3 s late
   const evaluate = page.evaluate;
   page.evaluate = async (...args) => { const v = await evaluate.apply(page, args); await new Promise(r => setTimeout(r, 300)); return v; };
-  await rec.shot('pan', 'window.__cam.apply(0, 0, 1.2)', 'a camera move of its own');
+  await rec.shot('pan', 'window.__cam.apply(0, 0, 1.2, 0.8)', 'a camera move of its own');
   delete page.evaluate;
   rec.note('probe', { lastShot: rec.lastShot });
   await rec.sleep(1600);
@@ -296,3 +302,4 @@ def test_rects_hold_on_a_page_whose_body_has_the_default_margin(tmp_path, layout
     pan, (probe,) = by_key["pan"], [e for e in log if e["kind"] == "probe"]
     assert pan["camera"]["k"] == 1.2 and "rect" not in pan, "only focus and region shots carry a rect"
     assert pan["t"] == pytest.approx(probe["lastShot"], abs=0.006)
+    assert pan["move"] == 0.8, "a move of its own length, made with the camera's apply"
