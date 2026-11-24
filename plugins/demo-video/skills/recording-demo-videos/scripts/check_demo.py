@@ -23,11 +23,15 @@ boxes  Each highlight box of a clip script, measured on the raw take, never on t
        (std > 28: the border runs over text or a picture), low_contrast (redness > 0.6), moved (change > 12: the
        screen under the box changed). A flag says "look at this row", not a failure: exit 0 whatever the flags.
 sheet  One row per voice of the plan: the finished reel's frames at the voice's start + 0.5 s, its middle and its
-       end - 0.2 s, an enlarged crop of each box (from --boxes reports, matched to a voice by the clip's name), the
-       caption, the narration, what each box points at, the flags and the times. texts.json: {"<name of a voice in the plan>":
-       {"caption": "...", "say": "...", "what": ["..."], "sources": ["..."]}}, every field optional; a voice's name is the
-       stem of its segment's clip or picture file (copy it from the plan); a key that matches no voice and a voice with no
-       entry are named on stderr. Writes
+       end - 0.2 s; each box (from --boxes reports, matched to a voice by the clip's name) whose time the voice's segment
+       shows, with the reel's frame at the middle of that time, an enlarged crop of the box from it and the time (a box
+       in no voiced segment's window is named on stderr; a plan without the segments' windows, written before reels
+       recorded them, gives each row every box of its clip, cropped from the voice's middle frame, with a line on stderr);
+       the caption, the narration, what each box points at, the flags and the times. texts.json: {"<name of a voice in
+       the plan>": {"caption": "...", "say": "...", "what": ["..."], "sources": ["..."]}}, every field optional (one text
+       is one phrase); what[i] goes with the i-th box of the clip's report; a voice's name is the stem of its segment's
+       clip or picture file (copy it from the plan); a texts key or a boxes report that matches no voice and a voice
+       with no entry are named on stderr. Writes
        <out>/index.json, one JPEG per row and <out>/review.html: one file with every picture and each voice's sound
        inside it, to send as it is. Its top lists every row and the flagged rows as links to the rows (in-page links
        only); a flagged row's card has a red edge.
@@ -514,8 +518,8 @@ def _crop(frame: Image.Image, rect, scale: float) -> Image.Image:
 
 
 def _row_picture(row: dict, frames: list[Image.Image], crops: list[Image.Image]) -> Image.Image:
-    """One row as one picture: a header line, the three frames with their times, the crops with what each box points
-    at, then the caption and the narration."""
+    """One row as one picture: a header line, the frames with their times (the voice's three, then one per box moment;
+    three to a line), the crops with what each box points at and its time, then the caption and the narration."""
     pad, gap = 16, 16
     width = 3 * SHEET_WIDTH + 2 * gap + 2 * pad
     bold, small = _font(edit_demo.FONT_BOLD, 24), _font(edit_demo.FONT_REG, 20)
@@ -529,9 +533,9 @@ def _row_picture(row: dict, frames: list[Image.Image], crops: list[Image.Image])
         x, line_h = x + cell + gap, max(line_h, crop.height + 30)
     text_lines = [(f"caption: {row['caption'] or '-'}", small)] + [
         (line, small) for line in _wrap(f"narration: {row['say'] or '-'}", small, width - 2 * pad)]
-    frames_h = max(f.height for f in shown)
+    frame_h, frame_lines = max(f.height for f in shown), math.ceil(len(shown) / 3)
     crops_h = (y_crops + line_h + gap) if cells else 0
-    height = pad + 36 + frames_h + 34 + crops_h + 28 * len(text_lines) + pad
+    height = pad + 36 + frame_lines * (frame_h + 34) + crops_h + 28 * len(text_lines) + pad
     image = Image.new("RGB", (width, height), (24, 27, 31))
     draw = ImageDraw.Draw(image)
     head = (f"#{row['row']}  {row['name']}   voice {row['start']:.2f}-{row['end']:.2f} s ({row['seconds']:.2f} s)"
@@ -539,14 +543,15 @@ def _row_picture(row: dict, frames: list[Image.Image], crops: list[Image.Image])
             + f"   flags: {', '.join(row['flags']) or 'none'}")
     draw.text((pad, pad), _fit(head, bold, width - 2 * pad), font=bold, fill=(255, 138, 128) if row["flags"] else (232, 234, 237))
     y = pad + 36
-    for i, (f, spec) in enumerate(zip(shown, row["frames"])):
-        fx = pad + i * (SHEET_WIDTH + gap)
-        image.paste(f, (fx, y))
-        draw.text((fx, y + f.height + 4), f"{spec['at']:.2f} s  ({spec['when']})", font=small, fill=(170, 178, 187))
-    y += frames_h + 34
+    for i, (f, spec) in enumerate(zip(shown, row["frames"] + row["box_frames"])):
+        fx, fy = pad + i % 3 * (SHEET_WIDTH + gap), y + i // 3 * (frame_h + 34)
+        image.paste(f, (fx, fy))
+        draw.text((fx, fy + f.height + 4), f"{spec['at']:.2f} s  ({spec['when']})", font=small, fill=(170, 178, 187))
+    y += frame_lines * (frame_h + 34)
     for cx, cy, crop, box in cells:
         image.paste(crop, (cx, y + cy))
-        label = f"box {box['box']}: {box['what'] or '-'}" + (f"  [{', '.join(box['flags'])}]" if box["flags"] else "")
+        label = (f"box {box['number']}: {box['what'] or '-'}  {box['at']:.2f} s"
+                 + (f"  [{', '.join(box['flags'])}]" if box["flags"] else ""))
         draw.text((cx, y + cy + crop.height + 4), _fit(label, small, max(crop.width, 300)), font=small, fill=(232, 234, 237))
     y += crops_h
     for line, font in text_lines:
@@ -555,20 +560,20 @@ def _row_picture(row: dict, frames: list[Image.Image], crops: list[Image.Image])
     return image
 
 
-def _row_section(row: dict, frames: list[bytes], crops: list[bytes], sound: tuple[str, bytes]) -> str:
+def _row_section(row: dict, frames: list[bytes], crops: list[bytes], sound: tuple[str, bytes], unmeasured: list[str]) -> str:
+    """One row of the page. Every text is escaped; the boxes' numbers were made numbers when their report was read."""
     e = lambda s: html.escape(str(s), quote=True)  # noqa: E731
     times = (f"voice {row['start']:.2f}-{row['end']:.2f} s ({row['seconds']:.2f} s)"
              + (f" · hold {row['hold']:.2f} s" if row.get("hold") is not None else ""))
     figures = "".join(f'<figure><img src="{_data_uri("image/jpeg", data)}" alt="frame at {spec["at"]:.2f} s">'
                       f'<figcaption>{spec["at"]:.2f} s · {e(spec["when"])}</figcaption></figure>'
-                      for data, spec in zip(frames, row["frames"]))
-    crop_figures = "".join(f'<figure><img src="{_data_uri("image/jpeg", data)}" alt="box {box["box"]}">'
-                           f'<figcaption>box {box["box"]}: {e(box["what"] or "-")}</figcaption></figure>'
+                      for data, spec in zip(frames, row["frames"] + row["box_frames"]))
+    crop_figures = "".join(f'<figure><img src="{_data_uri("image/jpeg", data)}" alt="box {box["number"]}">'
+                           f'<figcaption>box {box["number"]}: {e(box["what"] or "-")} · {box["at"]:.2f} s</figcaption></figure>'
                            for data, box in zip(crops, row["boxes"]))
     boxes = "".join(f'<li>{e(box["what"] or "-")}' + (f' <span class="flags">{e(", ".join(box["flags"]))}</span>' if box["flags"] else "")
                     + f' <span class="dim">std {box["std"]}, redness {box["redness"]}, change {box["change"]}</span></li>'
                     for box in row["boxes"])
-    unmeasured = row["what"][len(row["boxes"]):]
     boxes += "".join(f'<li>{e(w)} <span class="dim">(no box measured)</span></li>' for w in unmeasured)
     parts = [f'<section id="r{row["row"]}"' + (' class="flagged"' if row["flags"] else "") + '>'
              f'<h2>#{row["row"]} {e(row["name"])} <a class="back" href="#top">index</a></h2>',
@@ -585,6 +590,43 @@ def _row_section(row: dict, frames: list[bytes], crops: list[bytes], sound: tupl
     return "\n".join(p for p in parts if p)
 
 
+def _report_boxes(path: Path, report: dict) -> list[dict]:
+    """The boxes of a `boxes` report, with the fields the page shows made numbers (a report is a file that anyone can
+    write, and the page is made to be sent): one line when one is missing or is not a number."""
+    found = []
+    for n, box in enumerate(report["boxes"], 1):
+        try:
+            rect, clip = [int(round(float(v))) for v in box["rect"]], [float(v) for v in box["clip"]]
+            if len(rect) != 4 or len(clip) != 2 or not isinstance(box["flags"], list):
+                raise ValueError
+            found.append({**box, "box": int(box["box"]), "rect": rect, "clip": clip, "std": float(box["std"]),
+                          "redness": float(box["redness"]), "change": float(box["change"]),
+                          "flags": [str(f) for f in box["flags"]]})
+        except (KeyError, TypeError, ValueError):
+            raise SystemExit(f"{path}: box {n} is not as `check_demo.py boxes` writes it (it needs \"box\", \"rect\", "
+                             f"\"clip\", \"std\", \"redness\", \"change\" and \"flags\")")
+    return found
+
+
+def _phrases(value) -> list[str]:
+    """A texts entry's "what" or "sources": a list of phrases; one text is one phrase."""
+    if value is None or value == "":
+        return []
+    return [str(v) for v in value] if isinstance(value, list) else [str(value)]
+
+
+def _box_moment(box: dict, segment) -> float | None:
+    """Where in the reel a box shows in a clip segment: the middle of the part of its time (its "clip" seconds) that the
+    segment's window shows, as reel seconds; None when the window shows none of it (or the segment has no window)."""
+    try:
+        (w0, w1), (b0, b1) = [float(v) for v in segment["window"]], box["clip"]
+        start = float(segment["start"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    a, b = max(b0, w0), min(b1, w1)
+    return start + (a + b) / 2 - w0 if b > a else None
+
+
 def build_sheet(reel: Path, plan_path: Path, texts_path: Path, boxes_paths: list[Path], out: Path) -> dict:
     """index.json, one JPEG per voice and review.html in `out` (see the module docstring); returns index.json's data."""
     plan = _read_json(plan_path, "the plan")
@@ -594,16 +636,20 @@ def build_sheet(reel: Path, plan_path: Path, texts_path: Path, boxes_paths: list
     if not isinstance(texts, dict) or not all(isinstance(t, dict) for t in texts.values()):
         raise SystemExit(f'{texts_path} must hold {{"<name of a voice in the plan>": {{"caption", "say", "what", "sources"}}, ...}}')
     boxes_by_name: dict[str, list[dict]] = {}
+    report_of: dict[str, list[Path]] = {}
     for path in boxes_paths:
         report = _read_json(path, "the boxes report")
         if not isinstance(report, dict) or "name" not in report or not isinstance(report.get("boxes"), list):
             raise SystemExit(f"{path} is not a report of `check_demo.py boxes` (no name or no list of boxes)")
-        boxes_by_name.setdefault(report["name"], []).extend(report["boxes"])
+        boxes_by_name.setdefault(str(report["name"]), []).extend(_report_boxes(path, report))
+        report_of.setdefault(str(report["name"]), []).append(path)
     length = edit_demo.stream_seconds(reel, "v")
     if not length:
         raise SystemExit(f"cannot read a video stream in {reel}")
     scale = int(edit_demo.probe_size(reel).split("x")[0]) / W
     segments = plan.get("segments", [])
+    # a plan written before the segments' windows were recorded cannot say when a box shows in the reel
+    windows = any(isinstance(s, dict) and "window" in s for s in segments)
     out.mkdir(parents=True, exist_ok=True)
     names = [v["name"] for v in plan.get("voices", [])]
     for key in texts:  # a texts file keyed by other names gives an empty page: say so, still write the page
@@ -612,29 +658,57 @@ def build_sheet(reel: Path, plan_path: Path, texts_path: Path, boxes_paths: list
     for k, name in enumerate(names, 1):
         if name not in texts:
             print(f"sheet: voice {k} ({name}) has no entry in the texts file", file=sys.stderr)
-    rows, sections = [], []
+    for name, paths in report_of.items():
+        if name not in names:
+            print(f"sheet: boxes report {', '.join(p.name for p in paths)} (name {name!r}) matches no voice of the plan "
+                  f"(voices: {', '.join(dict.fromkeys(names))})", file=sys.stderr)
+    if boxes_by_name and not windows:
+        print("sheet: the plan has no segment windows (its reel was built before they were recorded): each box's crop "
+              "is taken from the frame at its voice's middle, whatever the box's time; build the reel again for crops at "
+              "each box's own time", file=sys.stderr)
+    rows, sections, placed = [], [], set()
+    clamp = lambda t: round(min(max(t, 0.0), length - 0.05), 3)  # noqa: E731
     for k, v in enumerate(plan.get("voices", []), 1):
         text = texts.get(v["name"]) or {}
-        what = [str(w) for w in text.get("what") or []]
-        at = [(when, min(max(t, 0.0), length - 0.05)) for when, t in
+        what = _phrases(text.get("what"))
+        at = [(when, clamp(t)) for when, t in
               (("start + 0.5 s", v["start"] + 0.5), ("middle", (v["start"] + v["end"]) / 2), ("end - 0.2 s", v["end"] - 0.2))]
-        frames = [_frame(reel, t) for _, t in at]
-        boxes = [{**box, "what": what[i] if i < len(what) else ""} for i, box in enumerate(boxes_by_name.get(v["name"], []))]
-        crops = [_crop(frames[1], box["rect"], scale) for box in boxes]
         segment = v.get("segment")
+        seg = segments[segment] if isinstance(segment, int) and 0 <= segment < len(segments) else {}
+        # what[i] goes with the i-th box of the clip's report, on whichever row that box shows
+        clip_boxes = [{**box, "number": i, "what": what[i - 1] if i <= len(what) else ""}
+                      for i, box in enumerate(boxes_by_name.get(v["name"], []), 1)]
+        if windows:   # each box at the middle of its own time, on the row whose window shows it
+            boxes = [{**box, "at": clamp(t)} for box in clip_boxes if (t := _box_moment(box, seg)) is not None]
+            placed.update((v["name"], box["number"]) for box in boxes)
+        else:
+            boxes = [{**box, "at": at[1][1]} for box in clip_boxes]
+        moments = list(dict.fromkeys(box["at"] for box in boxes)) if windows else []
+        box_frames = [{"at": t, "when": ("box " if len(ns) == 1 else "boxes ") + ", ".join(ns)}
+                      for t in moments for ns in [[str(b["number"]) for b in boxes if b["at"] == t]]]
+        frames = [_frame(reel, t) for _, t in at]
+        moment_frames = {spec["at"]: _frame(reel, spec["at"]) for spec in box_frames}
+        crops = [_crop(moment_frames[box["at"]] if windows else frames[1], box["rect"], scale) for box in boxes]
         row = {"row": k, "segment": segment, "name": v["name"], "start": v["start"], "end": v["end"],
                "seconds": round(v["end"] - v["start"], 3),
-               "hold": segments[segment]["hold"] if isinstance(segment, int) and segment < len(segments) else None,
-               "frames": [{"at": round(t, 3), "when": when} for when, t in at],
+               "hold": seg.get("hold") if isinstance(seg, dict) else None,
+               "frames": [{"at": t, "when": when} for when, t in at], "box_frames": box_frames,
                "caption": str(text.get("caption") or ""), "say": str(text.get("say") or ""), "what": what,
-               "sources": [str(s) for s in text.get("sources") or []], "boxes": boxes,
+               "sources": _phrases(text.get("sources")), "boxes": boxes,
                "flags": list(dict.fromkeys(f for box in boxes for f in box["flags"])),
                "picture": f"{k:02d}-{re.sub(r'[^A-Za-z0-9._-]+', '_', v['name'])}.jpg"}
-        _row_picture(row, frames, crops).save(out / row["picture"], "JPEG", quality=JPEG_QUALITY)
-        sections.append(_row_section(row, [_jpeg(f, SHEET_WIDTH) for f in frames], [_jpeg(c) for c in crops],
-                                     _voice_sound(reel, v["start"], v["end"])))
+        shown = frames + [moment_frames[spec["at"]] for spec in box_frames]
+        _row_picture(row, shown, crops).save(out / row["picture"], "JPEG", quality=JPEG_QUALITY)
+        sections.append(_row_section(row, [_jpeg(f, SHEET_WIDTH) for f in shown], [_jpeg(c) for c in crops],
+                                     _voice_sound(reel, v["start"], v["end"]), what[len(clip_boxes):]))
         rows.append(row)
         print(f"sheet: row {k} ({v['name']})", file=sys.stderr)
+    for name, found in boxes_by_name.items():
+        if windows and name in names:
+            for i, box in enumerate(found, 1):
+                if (name, i) not in placed:
+                    print(f"sheet: box {i} of {name} (beat {box.get('beat', '?')}, {box['clip'][0]:.2f}-{box['clip'][1]:.2f} "
+                          f"s of the clip) lies in no voiced segment's window: it is on no row", file=sys.stderr)
     e = lambda s: html.escape(str(s), quote=True)  # noqa: E731
     # links stay inside the page (href="#rN"): the page refers to no other file
     flagged = "; ".join(f'<a href="#r{r["row"]}">{r["row"]}</a> ({e(", ".join(r["flags"]))})' for r in rows if r["flags"])
@@ -642,7 +716,9 @@ def build_sheet(reel: Path, plan_path: Path, texts_path: Path, boxes_paths: list
                         + (f' <span class="flags">{e(", ".join(r["flags"]))}</span>' if r["flags"] else "") + "</li>" for r in rows)
     head = ['<nav id="top">', f'<h1>{e(reel.name)}</h1>',
             f'<p class="dim">{len(rows)} narrations · reel {length:.1f} s · plan {e(plan_path.name)}. '
-            f'Each row: frames at the voice\'s start + 0.5 s, middle and end - 0.2 s, its sound, the texts and the boxes. '
+            f'Each row: frames at the voice\'s start + 0.5 s, middle and end - 0.2 s, its sound, the texts and the boxes'
+            + (", each box with the frame at the middle of its own time and its crop from that frame. " if windows else
+               ", each box's crop from the frame at the voice's middle. ") +
             f'Name a row by its number to have it changed.</p>',
             f'<p class="flags">Rows with flags: {flagged}</p>' if flagged else '<p class="dim">No flags.</p>',
             f'<ol class="index">{every_row}</ol>' if rows else ""]

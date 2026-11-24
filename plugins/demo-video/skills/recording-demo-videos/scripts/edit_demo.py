@@ -762,7 +762,8 @@ def build_narrated_reel(spec: Path, out: Path) -> None:
                         {"image": "card.png", "seconds": 3, "voice": "card.mp3"}, ...],
            "fade": 0.4, "voice_gap": 0.6, "voice_tail": 1.0, "loudness": -16}
     Holds come from schedule() on the probed lengths. Each part is encoded and measured; a voice is placed at the measured
-    start of its part plus voice_at, so the sound cannot drift from the picture over a long reel.
+    start of its part plus voice_at, so the sound cannot drift from the picture over a long reel. The plan gives each
+    segment its measured start, length and hold, and a clip segment its "window" (the seconds of the clip it shows).
     """
     cfg = json.loads(spec.read_text(), object_pairs_hook=_manifest_object)
     segs, size = _narrated_segments(cfg)
@@ -813,7 +814,9 @@ def build_narrated_reel(spec: Path, out: Path) -> None:
     r4 = lambda t: round(t, 4)  # noqa: E731
     plan_path = out.with_suffix(".voice.json")
     write_json_atomic(plan_path, {
-        "segments": [{"name": s["name"], "start": r4(starts[i]), "seconds": r4(lengths[i]), "hold": r4(holds[i])}
+        # a clip segment's window (seconds of its clip) turns a time in the clip into reel time: start + (t - window[0])
+        "segments": [{"name": s["name"], "start": r4(starts[i]), "seconds": r4(lengths[i]), "hold": r4(holds[i]),
+                      **({} if s["image"] else {"window": [r4(s["start"]), r4(s["start"] + s["seconds"])]})}
                      for i, s in enumerate(segs)],
         "voices": [{**v, "start": r4(v["start"]), "end": r4(v["end"])} for v in voices],
         "warnings": warnings})

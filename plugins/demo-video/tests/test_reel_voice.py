@@ -238,6 +238,7 @@ def test_a_picture_segment_is_drawn_as_long_as_its_voice(tmp_path, private_tmp):
     p = pixel(out, 2.0, tmp_path)                       # 1 s after the picture's nominal end
     assert p[1] > 120 and p[0] < 60 and p[2] < 60, f"the picture, not black: {p}"
     assert plan["segments"][0]["name"] == "card" and plan["segments"][0]["hold"] > 2.0
+    assert "window" not in plan["segments"][0] and plan["segments"][1]["window"] == [0, 2], "a picture has no window"
     p = pixel(out, plan["segments"][1]["start"] + 1.0, tmp_path)
     assert p[2] > 200 and p[0] < 60, "the clip follows the picture"
 
@@ -310,7 +311,8 @@ def test_reel_writes_its_plan_and_warns(tmp_path, private_tmp, capsys):
     ]})
     assert [(s["name"], s["hold"] > 6) for s in plan["segments"]] == [("a", True), ("b", False)]
     for s in plan["segments"]:
-        assert set(s) == {"name", "start", "seconds", "hold"}
+        assert set(s) == {"name", "start", "seconds", "hold", "window"}
+    assert [s["window"] for s in plan["segments"]] == [[0, 2], [0, 2]], "the seconds of its clip each segment shows"
     assert plan["segments"][1]["start"] == pytest.approx(plan["segments"][0]["seconds"])
     assert sum(s["seconds"] for s in plan["segments"]) == pytest.approx(edit_demo.probe_duration(out), abs=0.05)
     (v,) = plan["voices"]

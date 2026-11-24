@@ -6,6 +6,7 @@ pictures drawn with Pillow for frames.
 import array
 import base64
 import importlib.util
+import io
 import json
 import re
 import shutil
@@ -488,9 +489,158 @@ def test_sheet_says_which_texts_keys_match_no_voice_and_which_voices_have_no_ent
     assert (out / "review.html").exists() and len(json.loads((out / "index.json").read_text())["rows"]) == 2
 
 
+EARLY_BOX, HELD_BOX = [1200, 300, 300, 200], [400, 300, 400, 200]
+BLOCK = "drawbox=x=450:y=350:w=300:h=100:color=white:t=fill:enable='lt(t,7)'"   # inside HELD_BOX until 7 s of the take
+
+
+@pytest.fixture(scope="module")
+def two_windows(tmp_path_factory):
+    """A take whose HELD_BOX region holds a white block until 7 s; its clip (speed 1, from 0) has a box 1.4-2.4 s and a
+    held caption from 3 s whose box shows 4.0-6.0 s ("box_delay" 1, "box_dur" 2). The reel shows that clip twice: 3-9 s
+    with a 10 s voice (so the window is held) and 9-12 s with a 1 s voice."""
+    d = tmp_path_factory.mktemp("two-windows")
+    take = make_take(d / "take.webm", BLOCK, seconds=12)
+    take.with_suffix(".camlog.json").write_text(json.dumps({"log": [{"t": 0.0, "kind": "shot", "key": "hero"}]}))
+    script = d / "clip.json"
+    script.write_text(json.dumps({"speed": 1, "start": 0, "beats": [
+        {"at": 1.4, "text": "early", "box": EARLY_BOX, "box_dur": 1.0},
+        {"at": 3.0, "text": "held", "box": HELD_BOX, "box_delay": 1.0, "box_dur": 2.0, "hold": True}]}))
+    clip = d / "clip.mp4"
+    edit_demo.build_clip(take, clip, None, None, None, None, True, None, script)
+    assert cli("boxes", script, "--raw", take, "--out", d / "clip.boxes.json").returncode == 0
+    texts = d / "texts.json"
+    texts.write_text(json.dumps({"clip": {"what": ["the early box", "the block"]}}))
+    reel, plan = build_reel(d, [
+        {"file": str(clip), "start": 3.0, "end": 9.0, "voice": str(make_tone(d / "long.mp3", 10.0)), "voice_at": 0.3},
+        {"file": str(clip), "start": 9.0, "end": 12.0, "voice": str(make_tone(d / "short.mp3", 1.0, 660)), "voice_at": 0.3}])
+    return d, reel, plan
+
+
+def crops_of(page: str) -> dict[str, Image.Image]:
+    """The crops on the page by their alt text, the first row's where two rows carry the same."""
+    crops = {}
+    for data, alt in re.findall(r'<img src="data:image/jpeg;base64,([^"]+)" alt="(box \d+)">', page):
+        crops.setdefault(alt, Image.open(io.BytesIO(base64.b64decode(data))).convert("RGB"))
+    return crops
+
+
+@needs_ffmpeg
+def test_the_plan_records_each_clip_segments_window(two_windows):
+    _, _, plan = two_windows
+    assert [s["window"] for s in plan["segments"]] == [[3.0, 9.0], [9.0, 12.0]]
+
+
+@needs_ffmpeg
+def test_sheet_crops_each_box_from_the_reel_at_the_middle_of_its_own_time(two_windows):
+    """The held box shows 4.0-6.0 s of the clip, 1.0-3.0 s into the first window: its crop is cut at 2.0 s of the reel,
+    holds the red border and the white block that the take shows there, and the voice's middle (8.3 s of the clip, the
+    block and the box gone) is not used for it. The second window of the same clip shows no box; the early box lies in
+    neither window and is named on stderr."""
+    d, reel, plan = two_windows
+    out = d / "review"
+    done = cli("sheet", reel, "--plan", reel.with_suffix(".voice.json"), "--texts", d / "texts.json",
+               "--boxes", d / "clip.boxes.json", "--out", out)
+    assert done.returncode == 0, done.stderr
+    first, second = json.loads((out / "index.json").read_text())["rows"]
+    (box,) = first["boxes"]
+    assert box["number"] == 2 and box["what"] == "the block" and box["at"] == pytest.approx(2.0, abs=0.02)
+    assert second["boxes"] == [], "the second window of the same clip does not show the box"
+    assert [l for l in done.stderr.splitlines() if "no row" in l] == [
+        "sheet: box 1 of clip (beat 1, 1.40-2.40 s of the clip) lies in no voiced segment's window: it is on no row"]
+    page = (out / "review.html").read_text(encoding="utf-8")
+    crop = crops_of(page)["box 2"]
+    zoom = crop.width / (400 + 2 * check_demo.CROP_MARGIN)
+    border = crop.getpixel((round((check_demo.CROP_MARGIN + 4) * zoom), crop.height // 2))
+    inside = crop.getpixel((crop.width // 2, crop.height // 2))
+    assert border[0] > 200 and border[1] < 90 and border[2] < 90, f"the red border: {border}"
+    assert min(inside) > 220, f"the white block under the box at its time: {inside}"
+    assert "box 2: the block · 2.00 s" in page, "the crop's time is printed under it"
+    pictures = re.findall(r'src="data:image/jpeg;base64,', page)
+    assert len(pictures) == 3 * 2 + 1 + 1, "three frames a row, the whole frame of the box's moment and its crop"
+
+
+@needs_ffmpeg
+def test_sheet_on_a_plan_without_windows_takes_the_crops_at_the_voices_middle_and_says_so(two_windows):
+    d, reel, plan = two_windows
+    old = {**plan, "segments": [{k: v for k, v in s.items() if k != "window"} for s in plan["segments"]]}
+    (d / "old.voice.json").write_text(json.dumps(old))
+    out = d / "review-old"
+    done = cli("sheet", reel, "--plan", d / "old.voice.json", "--texts", d / "texts.json",
+               "--boxes", d / "clip.boxes.json", "--out", out)
+    assert done.returncode == 0, done.stderr
+    (line,) = [l for l in done.stderr.splitlines() if "middle" in l]
+    assert line.startswith("sheet: ") and "window" in line
+    rows = json.loads((out / "index.json").read_text())["rows"]
+    assert [len(r["boxes"]) for r in rows] == [2, 2], "as before: every box of the clip on each of its rows"
+    inside = crops_of((out / "review.html").read_text(encoding="utf-8"))["box 2"]
+    assert max(inside.getpixel((inside.width // 2, inside.height // 2))) < 160, "the voice's middle: no block any more"
+
+
+def sheet_of(d: Path, reel: Path, texts: dict, report: dict | None, name: str) -> subprocess.CompletedProcess:
+    (d / f"{name}.texts.json").write_text(json.dumps(texts))
+    extra = []
+    if report is not None:
+        (d / f"{name}.boxes.json").write_text(json.dumps(report))
+        extra = ["--boxes", d / f"{name}.boxes.json"]
+    return cli("sheet", reel, "--plan", reel.with_suffix(".voice.json"), "--texts", d / f"{name}.texts.json", *extra,
+               "--out", d / name)
+
+
+@needs_ffmpeg
+def test_markup_in_the_texts_and_in_a_boxes_report_reaches_the_page_as_text(two_windows):
+    d, reel, _ = two_windows
+    report = json.loads((d / "clip.boxes.json").read_text())
+    report["boxes"][1]["flags"] = ['<img src=x onerror="alert(1)">']
+    texts = {"clip": {"caption": "<script>alert(1)</script>", "say": 'a"><b>bold</b>', "what": ["<i>one</i>", "<u>two</u>"],
+                      "sources": ["<a href=x>link</a>"]}}
+    done = sheet_of(d, reel, texts, report, "hostile")
+    assert done.returncode == 0, done.stderr
+    page = (d / "hostile" / "review.html").read_text(encoding="utf-8")
+    for markup in ("<script", "<img src=x", "<b>", "<i>", "<u>", "<a href=x"):
+        assert markup not in page, markup
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in page and "&lt;img src=x onerror=&quot;alert(1)&quot;&gt;" in page
+    assert "&lt;u&gt;two&lt;/u&gt;" in page
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("field, value", [("std", "<script>alert(1)</script>"), ("box", "<svg onload=alert(1)>"),
+                                          ("flags", None), ("change", None), ("clip", [1])])
+def test_a_boxes_report_whose_fields_are_not_as_boxes_writes_them_stops_with_one_line(two_windows, field, value):
+    d, reel, _ = two_windows
+    report = json.loads((d / "clip.boxes.json").read_text())
+    if value is None:
+        del report["boxes"][1][field]
+    else:
+        report["boxes"][1][field] = value
+    done = sheet_of(d, reel, {}, report, f"bad-{field}")
+    assert done.returncode == 1 and "Traceback" not in done.stderr
+    (line,) = done.stderr.strip().splitlines()
+    assert "bad-" in line and "box 2" in line, line
+
+
+@needs_ffmpeg
+def test_sheet_names_a_boxes_report_that_matches_no_voice(two_windows):
+    d, reel, _ = two_windows
+    report = {**json.loads((d / "clip.boxes.json").read_text()), "name": "other"}
+    done = sheet_of(d, reel, {}, report, "unmatched")
+    assert done.returncode == 0, done.stderr
+    assert any(l.startswith("sheet: boxes report ") and "'other'" in l and "matches no voice" in l
+               for l in done.stderr.splitlines()), done.stderr
+
+
+@needs_ffmpeg
+def test_a_what_or_a_source_given_as_one_text_is_one_phrase(two_windows):
+    d, reel, _ = two_windows
+    done = sheet_of(d, reel, {"clip": {"what": "the early box", "sources": "the screen"}}, None, "one-text")
+    assert done.returncode == 0, done.stderr
+    row = json.loads((d / "one-text" / "index.json").read_text())["rows"][0]
+    assert row["what"] == ["the early box"] and row["sources"] == ["the screen"]
+
+
 @needs_ffmpeg
 def test_sheet_writes_one_row_per_voice_in_one_html_file(tmp_path):
-    a, b, c = make_clip(tmp_path / "a.mp4", 3), make_clip(tmp_path / "b.mp4", 3, "blue"), make_clip(tmp_path / "c.mp4", 2, "green")
+    # clip a is as long as the take its boxes report was measured on, so its window holds the box (3.0-5.9 s of the clip)
+    a, b, c = make_clip(tmp_path / "a.mp4", 6), make_clip(tmp_path / "b.mp4", 3, "blue"), make_clip(tmp_path / "c.mp4", 2, "green")
     reel, plan = build_reel(tmp_path, [
         {"file": str(a), "voice": str(make_voice(tmp_path / "one.mp3", 0.4, 1.0, 0.3, 440)), "voice_at": 0.3},
         {"file": str(b), "voice": str(make_voice(tmp_path / "two.mp3", 0.3, 0.8, 0.4, 550)), "voice_at": 0.5},
@@ -532,7 +682,7 @@ def test_sheet_writes_one_row_per_voice_in_one_html_file(tmp_path):
     assert '<meta charset="utf-8">' in page and "에이전트 게이트웨이에 정책 세 개가 걸려 있습니다." in page
     assert "기록 모드로 걸린 정책 세 줄" in page and "crosses" in page
     pictures = [s for s in sources if s.startswith("data:image/jpeg;base64,")]
-    assert len(pictures) == 3 * 3 + 1, "three frames a row and one crop for the one box"
+    assert len(pictures) == 3 * 3 + 2, "three frames a row, and the whole frame of the one box's moment and its crop"
     sounds = [base64.b64decode(s.split(",", 1)[1]) for s in sources if s.startswith("data:audio/")]
     for sound, freq, (lead, tone, trail) in zip(sounds, [440, 550, 660], [(0.4, 1.0, 0.3), (0.3, 0.8, 0.4), (0.5, 0.6, 0.3)], strict=True):
         assert tone_frequency(sound, tmp_path) == pytest.approx(freq, rel=0.05), "each row plays its own voice"
