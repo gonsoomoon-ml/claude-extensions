@@ -12,7 +12,7 @@
 | 카드 | `python3 scripts/make_cards.py cards.json --out clips` | 인트로, 간지, 정리 카드 mp4와 PNG 미리보기 |
 | 릴 | `python3 scripts/edit_demo.py reel reel.json --out reel.mp4` | 인트로 카드, 챕터, 정리 카드 순서의 한 영상. 이어 붙인 뒤 한 번 더 재인코딩한 단일 스트림(High 4.1, 3 Mbit/s 상한) 파일 하나 |
 | 음성 | `python3 scripts/edit_demo.py voice lines.json --out voice/` | 줄마다 mp3 하나(Amazon Polly)와 `voice.json`. 바뀌지 않은 줄은 다시 합성하지 않습니다 |
-| 내레이션 릴 | 같은 `reel` 명령, 매니페스트 구간에 `voice`, `voice_at`, `group`, 그림 구간(`image`, `seconds`) | 목소리가 끝날 때까지 구간의 마지막 장면을 붙들어 두고, -16 LUFS로 맞춘 음성 트랙 하나와 `reel.voice.json`(잰 시각) |
+| 내레이션 릴 | 같은 `reel` 명령, 매니페스트 구간에 `voice`, `voice_at`, `group`, 그림 구간(`image`, `seconds`) | 목소리가 끝날 때까지 구간의 마지막 장면을 붙들어 두고, -16 LUFS로 맞춘 음성 트랙 하나(true peak 상한 때문에 한 번의 이득으로 못 미치면 1.5 LU 안까지)와 `reel.voice.json`(잰 시각) |
 | 검사 | `python3 scripts/check_demo.py` 의 `audit`, `boxes`, `sheet` | 소리와 계획 비교(`audit`), 상자 아래 화면 측정(`boxes`), 목소리마다 한 줄씩 담고 소리까지 넣은 `review.html` 한 파일(`sheet`) |
 
 카메라는 브라우저 안에서 `body`에 CSS `transform`을 걸어 움직입니다. 녹화된 영상을 나중에 잘라 확대하면 흐려지지만, 페이지 안에서 확대하면 글자가 그 크기로 다시 그려져 2배까지 선명합니다. `--layout 1280x720`도 같은 이유로 `html { zoom }`을 씁니다.
@@ -23,7 +23,7 @@
 
 - 자막 하나에 `"box"`를 주면 그 자막이 보이는 동안 빨간 테두리(8 px, 바깥에 어두운 선 2 px)가 화면 위에 그려집니다. 좌표 `[x, y, w, h]`나 녹화기가 카메라 로그에 적은 사각형(`"shot:<키>"`, `"mark:<키>"`)을 씁니다. 화면은 건드리지 않습니다.
 - 녹화기는 `focus`와 `region` 샷의 사각형을 카메라 로그에 적고, `rec.mark(키, 선택자, 라벨)`(터미널은 `markRows`)로 카메라를 움직이지 않고 자리만 적습니다.
-- `"hold": true`는 마지막 자막을 클립 끝까지 붙들고, `"box_dur"`는 상자만 먼저 끝냅니다. 카메라가 움직이는 동안 상자가 보이면 클립 단계가 ffmpeg 전에 멈추고 고칠 방법을 알려 줍니다.
+- `"hold": true`는 마지막 자막을 클립 끝까지 붙들고, `"box_dur"`는 상자만 먼저 끝냅니다. 카메라가 움직이는 동안(샷의 시각부터 카메라가 멈출 때까지, 기본 1.4초) 상자가 보이면 자막이 무엇에 걸려 있든 클립 단계가 ffmpeg 전에 멈추고, 카메라가 멈추는 시각과 상자를 그 뒤에 띄우는 `"box_delay"` 값을 알려 줍니다.
 - 내레이션은 줄마다 합성하고, 릴이 그 길이를 재서 화면이 목소리를 앞지르지 않게 마지막 장면을 붙듭니다. 카드는 페이드가 영상에 구워져 있어 붙들면 검게 변하므로, 목소리가 있는 카드는 그림 구간으로 넣습니다.
 - 검사는 소리가 어디 있고 얼마나 큰지만 압니다. 발음이 좋은지는 듣지 못하니 `review.html`을 사람이 듣습니다.
 
@@ -45,7 +45,7 @@ node scripts/record_demo.mjs --url http://127.0.0.1:7681 --storyboard ./storyboa
 
 ```bash
 sudo apt install ffmpeg fonts-nanum        # 한국어 자막 글꼴
-pip install pillow                         # 카드 렌더링
+pip install pillow                         # 카드 렌더링, check_demo.py
 mkdir pw && cd pw && npm i playwright && npx playwright install chromium   # 앱 저장소에 playwright가 없을 때
 ```
 

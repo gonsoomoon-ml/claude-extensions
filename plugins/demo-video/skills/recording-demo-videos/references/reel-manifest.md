@@ -56,10 +56,11 @@ A segment may carry a voice, and a segment may be a picture instead of a clip. A
 | `loudness` | top level | integrated loudness of the voice track in LUFS; default -16, true peak at most -1.5 dBTP |
 
 - The reel holds a segment's last frame until its voice has ended, mixes the voices into the reel's only sound (the clips' own audio is dropped) and places each voice by the measured length of the parts before it, not by the lengths the manifest states.
-- It writes `<reel stem>.voice.json` beside the reel: each segment's measured `start`, `seconds` and `hold`, each voice's measured `start` and `end`, and `warnings` (a hold over 6 s, holds over 30 % of the reel, a voice over 14 s, a voice track that one gain cannot bring to the target; none of them stops the reel). `check_demo.py audit` and `sheet` read that file.
+- It writes `<reel stem>.voice.json` beside the reel: each segment's measured `start`, `seconds` and `hold`, each clip segment's `"window"` (the seconds of its clip it shows), each voice's measured `start` and `end`, and `warnings` (a hold over 6 s, holds over 30 % of the reel, a voice over 14 s, a voice track that one gain brings only near the target, with the level reached, and one that has to be compressed; none of them stops the reel). `check_demo.py audit` and `sheet` read that file.
+- The voice track is brought to `loudness` with one gain when that reaches it under the true-peak ceiling; else with the largest gain the ceiling allows when that lands within 1.5 LU of it; else loudnorm compresses, which changes the voices' levels against each other. The three ways are in [voice-and-highlight.md](voice-and-highlight.md).
 - `fade`, `fade_in` and `fade_out` apply to a narrated reel as to any other. Pieces of one `group` are one scene: `fade_out: 0` on the earlier and `fade_in: 0` on the later, as in the example, or the picture dips to black while the voice runs on.
 - The plan file holds the absolute paths of the voice files.
 - `--copy` is refused for a narrated reel.
-- A voice track shorter than about 3 s comes out quieter than the target, with a warning.
+- A voice track shorter than about 3 s that has to be compressed comes out quieter than the target, with a warning.
 
 The schedule's rules, the checks and their limits are in [voice-and-highlight.md](voice-and-highlight.md).

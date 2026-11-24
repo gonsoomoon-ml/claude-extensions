@@ -39,7 +39,7 @@ Take a still every 5 s to find where the UI changes, refine to 0.5 s, write the 
 
 ## Boxes, held captions, narration
 
-A beat's `"box"` draws a red border while its caption shows; a camera move under a box stops the clip with the fix named. `"hold": true` keeps the last caption to the last frame.
+A beat's `"box"` draws a red border while its caption shows; a box shown during a camera move stops the clip with the fix named. `"hold": true` keeps the last caption to the last frame.
 
 Narration: `python3 scripts/edit_demo.py voice lines.json --out voice/` makes one mp3 per line with Amazon Polly. A reel segment takes `"voice"`, `"voice_at"`, `"group"`; a card under narration is a picture segment, `{"image": "card.png", "seconds": 3}`, because a held card clip fades to black. The reel holds each segment's last frame until its voice ends and writes `<reel>.voice.json`. Then `audit`, `boxes`, `sheet`; they cannot hear, so listen on `review.html`. Details: [references/voice-and-highlight.md](references/voice-and-highlight.md).
 

@@ -64,7 +64,7 @@ A beat can point at what its sentence is about. The frame stays untouched; a red
 | `"box_dur"` | seconds of the finished clip the box shows, from its start; without it the box shows until its caption ends |
 | `"hold": true` | on the last beat only: the caption and its boxes stay to the clip's last frame, with no fade-out |
 
-A box may not lie under the caption, and may not show while the camera moves to a new shot: the clip step stops with a message that names the fix. A held caption stays to the end of the clip, so on a clip whose camera moves on, give the box a `box_dur` that ends before the move. One caption has one time for its boxes: to point at two things one after the other, write two beats. Rules, refusals and a worked `box_dur` are in [voice-and-highlight.md](voice-and-highlight.md).
+A box may not lie under the caption, and may not show while the camera moves: from a shot's time until the camera stops (1.4 s, or the shot's own `dur`), whatever the beat is anchored to; a shot that leaves the camera where it was is no move. The clip step stops with a message that says when the camera stops and which `"box_delay"` starts the box after it. A held caption stays to the end of the clip, so on a clip whose camera moves on, give the box a `box_dur` that ends before the move. One caption has one time for its boxes: to point at two things one after the other, write two beats. Rules, refusals and a worked `box_dur` are in [voice-and-highlight.md](voice-and-highlight.md).
 
 A beat that is narrated is written for the ear as well: the narration line (one per beat or per card, see [voice-and-highlight.md](voice-and-highlight.md)) says only what the frames show while it plays, and the caption stays as it is.
 
