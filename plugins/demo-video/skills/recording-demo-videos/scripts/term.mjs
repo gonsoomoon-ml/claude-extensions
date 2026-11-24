@@ -1,6 +1,6 @@
 // Terminal scenes: helpers for a storyboard that drives a CLI (Claude Code, any TUI) inside a browser terminal served by
 // ttyd, so record_demo.mjs can film it with the same in-page camera. Import from your storyboard:
-//   import { openTerminal, run, type, paste, waitFor, waitPrompt, zoomRows } from '<plugin>/scripts/term.mjs';
+//   import { openTerminal, run, type, paste, waitFor, waitPrompt, zoomRows, markRows } from '<plugin>/scripts/term.mjs';
 // Serve the shell on loopback only (a writable shell on 0.0.0.0 is a hole):  ttyd -i lo -p 7681 -W bash
 // then record with  node record_demo.mjs --url http://127.0.0.1:7681 --storyboard ./storyboard.mjs
 // Notes (1.3.0): ttyd's own -t options may be dropped (its JSON breaks), so the page sets xterm options itself; the DOM
@@ -85,4 +85,12 @@ export async function zoomRows(rec, page, key, firstNeedle, lastNeedle, opts = {
   if (!r) { console.warn(`zoomRows: ${firstNeedle} not on screen`); return rec.reset(key, label); }
   const w = Math.min(r.w, opts.maxW ?? 1900);  // never crop the right edge of wrapped lines
   return rec.region(key, r.x, r.y, w, r.h, { pad: opts.pad ?? 28, kmax: opts.kmax ?? 1.6, anchorTop: true }, label);
+}
+
+/** Say where the rows between two needles are on the frame, moving nothing (rec.mark for terminal rows): a "mark"
+ *  entry with "rect" in the camlog. The text not on screen → missing: true, a warning, and null. */
+export async function markRows(rec, page, key, firstNeedle, lastNeedle, label) {
+  const r = await rowsRect(page, firstNeedle, lastNeedle);
+  if (!r) return rec.markRect(key, null, label, `${firstNeedle} not on screen`);
+  return rec.markRect(key, (await page.evaluate(r => window.__cam.frameRect(r), r)) ?? undefined, label);   // off the frame: no rect
 }

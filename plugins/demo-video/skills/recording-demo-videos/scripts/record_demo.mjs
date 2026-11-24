@@ -5,7 +5,10 @@
  *   node record_demo.mjs --url https://site --storyboard ./storyboard.mjs --name intro [--out raw] [--max-seconds 150] [--layout 1280x720]
  *
  * Output: <out>/<name>.webm (1920x1080, wall-clock video) + <out>/<name>.camlog.json (every shot with
- * its time and label, used by edit_demo.py to place captions).
+ * its time and label, used by edit_demo.py to place captions). A shot made by focus or region also holds
+ * "rect": [x, y, w, h], where its target lies on the 1920x1080 frame once the camera has stopped (integers,
+ * clipped to the frame, none when the target lies wholly outside it); rec.mark(key, selector, label) writes a
+ * "mark" entry with the same rect for an element, without moving the camera.
  *
  * The camera is a CSS transform on <body> (scale + translate, 1.4 s eased transition) applied while
  * Playwright records the full 1920x1080 viewport. Cropping the recording afterwards is blurry; the
@@ -57,6 +60,7 @@ const CAMERA_JS = `
   const Z = ${Z}, W = ${W} / Z, H = ${H} / Z;
   if (Z !== 1) document.documentElement.style.zoom = String(Z);
   const state = { x: 0, y: 0, k: 1 };
+  let target = null;  // untransformed rect of the last focus/region: what the shot points at
   const pageSize = () => ({ w: Math.max(document.body.offsetWidth, W), h: Math.max(document.body.offsetTop + document.body.offsetHeight, H) });
   // Element rect in untransformed page coordinates: invert the current body transform and fold in scroll,
   // otherwise the second shot measures a rect that is already scaled by the first.
@@ -77,7 +81,17 @@ const CAMERA_JS = `
     Object.assign(state, { x, y, k });
     return { x, y, k };
   };
+  // A rectangle in untransformed page coordinates as the frame shows it with the camera at its current state (the
+  // position a move in progress is heading to): scale(k) translate(-x,-y), then the layout zoom Z; integers (edges
+  // rounded outwards), clipped to the frame; null when nothing of it lies on the frame.
+  const frameRect = r => {
+    const s = Z * state.k;
+    const x0 = Math.max(0, Math.floor(s * (r.x - state.x))), y0 = Math.max(0, Math.floor(s * (r.y - state.y)));
+    const x1 = Math.min(W * Z, Math.ceil(s * (r.x + r.w - state.x))), y1 = Math.min(H * Z, Math.ceil(s * (r.y + r.h - state.y)));
+    return x1 > x0 && y1 > y0 ? [x0, y0, x1 - x0, y1 - y0] : null;
+  };
   const fitRect = (r, opts = {}) => {
+    target = r;
     const pad = opts.pad ?? 24, kmax = opts.kmax ?? 2.2;
     let k = Math.min(W / (r.w + 2 * pad), H / (r.h + 2 * pad), kmax);
     k = Math.max(1, k);
@@ -93,9 +107,16 @@ const CAMERA_JS = `
     return fitRect(r, opts);
   };
   const region = (x, y, w, h, opts = {}) => fitRect({ x, y, w, h }, opts);
-  const reset = dur => apply(0, 0, 1, dur);
+  const reset = dur => { target = null; return apply(0, 0, 1, dur); };
+  const targetRect = () => (target ? frameRect(target) : null);
+  // The element's rect for a mark: { found: false } when nothing matches (or it has no size), else { rect }.
+  const mark = (selector, index = 0) => {
+    const el = document.querySelectorAll(selector)[index];
+    const r = el && untransformed(el);
+    return !r || r.w < 2 || r.h < 2 ? { found: false } : { found: true, rect: frameRect(r) };
+  };
   const rect = selector => { const el = document.querySelector(selector); return el ? untransformed(el) : null; };
-  window.__cam = { focus, region, reset, rect, apply, state, pageSize };
+  window.__cam = { focus, region, reset, rect, apply, state, pageSize, frameRect, targetRect, mark };
 })();`;
 
 // Playwright's click()/fill() scroll the target into view, which fights the camera transform. Dispatch instead.
@@ -112,7 +133,8 @@ class Recorder {
     // null = selector matched nothing (or a 0-size element): the camera did not move. Say so loudly; a silent
     // no-op here means a whole take with the wrong framing.
     const missing = result === null;
-    this.note('shot', { key, label, camera: result, ...(missing ? { missing: true } : {}) });
+    const rect = result && result.k !== undefined ? await this.page.evaluate('window.__cam.targetRect()').catch(() => null) : null;
+    this.note('shot', { key, label, camera: result, ...(rect ? { rect } : {}), ...(missing ? { missing: true } : {}) });
     if (missing) console.warn(`[${this.now().toFixed(1)}s] shot ${key}: selector matched nothing, camera unchanged`);
     else console.log(`[${this.now().toFixed(1)}s] shot ${key}${label ? ' — ' + label : ''}`);
     return result;
@@ -121,6 +143,20 @@ class Recorder {
   async focus(key, selector, opts = {}, label) { return this.shot(key, `window.__cam.focus(${JSON.stringify(selector)}, ${JSON.stringify(opts)})`, label); }
   /** Zoom to fit a page-coordinate rectangle. */
   async region(key, x, y, w, h, opts = {}, label) { return this.shot(key, `window.__cam.region(${x},${y},${w},${h},${JSON.stringify(opts)})`, label); }
+  /** Say where an element is on the frame as the camera shows it (or will: a move under way counts as made), moving
+   *  nothing. Writes a "mark" entry with "rect"; no match → missing: true, a warning, and null. */
+  async mark(key, selector, label, index = 0) {
+    const found = await this.page.evaluate(`window.__cam.mark(${JSON.stringify(selector)}, ${index})`).catch(error => ({ error: String(error) }));
+    return this.markRect(key, found && found.found ? found.rect ?? undefined : null, label, `selector ${selector} matched nothing`);
+  }
+  /** The same for a rectangle in untransformed page coordinates (term.mjs markRows). rect null: nothing to mark. */
+  async markRect(key, rect, label, whyMissing = 'nothing to mark') {
+    const missing = rect === null;
+    this.note('mark', { key, label, ...(rect ? { rect } : {}), ...(missing ? { missing: true } : {}) });
+    if (missing) console.warn(`[${this.now().toFixed(1)}s] mark ${key}: ${whyMissing}`);
+    else console.log(`[${this.now().toFixed(1)}s] mark ${key}${label ? ' — ' + label : ''}`);
+    return missing ? null : rect;
+  }
   async reset(key = 'wide', label) { return this.shot(key, 'window.__cam.reset()', label); }
   since() { return this.now() - this.lastShot; }
   async sleep(ms) { await this.page.waitForTimeout(ms); }
