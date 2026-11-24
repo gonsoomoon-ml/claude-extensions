@@ -192,3 +192,17 @@ def test_the_readme_states_the_one_new_requirement_and_the_origin():
     readme = README_MD.read_text()
     assert "polly:SynthesizeSpeech" in readme, "the only new requirement: the AWS CLI, for synthesis only"
     assert "2026-11-24" in readme and "check_demo.py" in readme
+
+
+def test_the_version_is_1_4_0_wherever_it_is_written():
+    """The version lives in plugin.json only; the descriptions and the README's origin section name the release."""
+    plugin = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text())
+    assert plugin["version"] == "1.4.0"
+    assert "1.4.0 adds" in plugin["description"] and "1.3.0 adds" in plugin["description"], "both releases stay in the history sentence"
+    market = json.loads((PLUGIN.parents[1] / ".claude-plugin" / "marketplace.json").read_text())
+    entry = next(p for p in market["plugins"] if p["name"] == "demo-video")
+    assert "version" not in entry and entry["description"].rstrip().endswith("1.4.0.")
+    assert market["metadata"]["version"] == "1.0.0", "the marketplace's own version stays"
+    assert "1.3.0." not in entry["description"]
+    assert re.search(r"^- 1\.4\.0 \(2026-11-24", README_MD.read_text(), re.M), "the README's origin section names the release"
+    assert "version" not in frontmatter(), "the skill's frontmatter carries no version"
