@@ -46,7 +46,8 @@ Script JSON:
   (frame pixels; the last two use the camlog entry's rect, grown by the border + 4 px). A red border (8 px, a dark line
   outside it) shows from the caption's start + "box_delay" (default 1.4 / speed + 0.2 s on a "shot:" anchor, else 0) to its end.
   "hold": true on the LAST beat keeps its caption and boxes to the clip's last frame with no fade-out. A box under the
-  caption, outside the frame, or with a camera move (a camlog shot) while it shows stops the clip before ffmpeg starts.
+  caption, outside the frame, with a camera move (a camlog shot) while it shows, or that can never show (its delay
+  outlasts its caption) stops the clip before ffmpeg starts.
   Beat duration defaults to the gap to the next beat (max 7 s, min 1.5 s). `#n` counts occurrences of that
   same key / substring / kind only. Raw seconds are seconds from launch and are not validated against the
   camlog. A context fact with no event of its own (a batch statistic, a caveat) belongs on a late summary
@@ -94,6 +95,7 @@ HIGHLIGHT = os.environ.get("DEMO_HIGHLIGHT", "0xff2a2a@0.95")
 HIGHLIGHT_THICK = int(os.environ.get("DEMO_HIGHLIGHT_THICK", "8"))
 HIGHLIGHT_OUTLINE = 2
 CAMERA_MOVE = 1.4  # seconds the recorder's camera takes to arrive on a shot (raw time)
+CAMERA_MARGIN = 0.001  # raw seconds: a box's times come back from clip seconds with float rounding (a beat's own shot)
 
 
 def run(cmd: list[str]) -> None:
@@ -177,6 +179,8 @@ def beat_boxes(beat: dict, log: list[dict]) -> list[tuple[int, int, int, int]]:
         if len(hits) < n or not hits[n - 1].get("rect"):
             _bad_box(box, "has no rect in the camlog (use 'shot:<key>' or 'mark:<key>' of an element the recorder measured)")
         return [_frame_rect(hits[n - 1]["rect"], grow=HIGHLIGHT_THICK + 4)]
+    if not isinstance(box, (list, tuple)):
+        _bad_box(box, "needs [x, y, w, h], a list of them, or 'shot:<key>' / 'mark:<key>'")
     rects = box if isinstance(box[0], (list, tuple)) else [box]
     return [_frame_rect(r) for r in rects]
 
@@ -206,12 +210,72 @@ def drawbox(rect, *, start: float, end: float) -> list[str]:
             f"drawbox=x={x}:y={y}:w={w}:h={h}:color={HIGHLIGHT}:t={HIGHLIGHT_THICK}:{enable}"]
 
 
+def beat_layout(beats: list[dict], log: list[dict], *, start: float, end: float, speed: float, title) -> list[dict]:
+    """When and where each beat of a script shows in its clip, checked before ffmpeg starts.
+
+    The beats in time order, each {"beat": the beat, "caption": (start, end) in clip seconds, or None when the caption
+    has under 1 s of room and is left out, "boxes": [(x, y, w, h), ...], "box": (start, end) in clip seconds while the
+    boxes show, "box_raw": the same in the take's seconds (start + t * speed); both None without boxes}. Stops on a
+    box outside the frame, a hold on a beat that is not the last, a box that can never show, a box under its
+    caption's band, and a camera move (a camlog shot) while a box shows.
+    """
+    rel = lambda t: (t - start) / speed  # noqa: E731
+    timed = sorted(((rel(script_time(b["at"], log) + float(b.get("offset", 0))), b) for b in beats), key=lambda x: x[0])
+    boxes = [beat_boxes(b, log) for _, b in timed]  # every box's frame check comes first
+    for _, b in timed[:-1]:
+        if b.get("hold"):
+            raise SystemExit(f"hold on beat {b['text']!r} is not allowed: only the clip's last beat can be held")
+    shots = [e for e in log if e["kind"] == "shot"]
+    layout = []
+    for i, (t0, b) in enumerate(timed):
+        t0 = max(t0, 4.4 if title else 0.2 if speed == 1 else 0.0)  # never under the title card
+        nxt = timed[i + 1][0] if i + 1 < len(timed) else rel(end)
+        dur = float(b.get("dur", min(7.0, nxt - t0 - 0.3)))
+        t1 = rel(end) if b.get("hold") else min(t0 + max(dur, 1.5), rel(end) - 0.1)
+        item = {"beat": b, "caption": (t0, t1) if t1 - t0 >= 1.0 else None, "boxes": boxes[i], "box": None, "box_raw": None}
+        layout.append(item)
+        if not boxes[i]:
+            continue
+        # a box that can never show is a mistake in the script, not something to skip with a note
+        if item["caption"] is None:
+            raise SystemExit(f"box of {b['text']!r} can never show: its caption has no room ({t1 - t0:.2f} s, "
+                             f"under 1 s) and is left out")
+        b0 = t0 + box_delay(b, speed)
+        if b0 >= t1:
+            raise SystemExit(f"box of {b['text']!r} can never show: it waits {b0 - t0:.2f} s (box_delay) and its caption "
+                             f"lasts {t1 - t0:.2f} s; shorten \"box_delay\" or lengthen the caption")
+        band = caption_band(b.get("pos"))
+        for r in boxes[i]:
+            if r[1] < band[1] and r[1] + r[3] > band[0]:
+                raise SystemExit(f"box {list(r)} crosses the caption band y {band[0]}-{band[1]} (pos={b.get('pos') or 'bottom'}): "
+                                 f"move the box or set \"pos\" to the other edge")
+        lo, hi = start + b0 * speed, start + t1 * speed  # the box's time in the take's seconds
+        for e in shots:
+            if lo + CAMERA_MARGIN < e["t"] < hi - CAMERA_MARGIN:
+                raise SystemExit(f"the camera moves to shot {e.get('key')!r} at {e['t']:.2f} s while the box of "
+                                 f"{b['text']!r} shows ({lo:.2f}-{hi:.2f} s): shorten the caption or move the box")
+        item.update(box=(b0, t1), box_raw=(lo, hi))
+    return layout
+
+
+def read_camlog(raw: Path) -> list[dict]:
+    """The camlog entries of a Playwright take (<name>.camlog.json beside <name>.webm); none for a screen recording."""
+    camlog = raw.with_suffix("").with_suffix(".camlog.json") if raw.suffix == ".webm" else None
+    return json.loads(camlog.read_text())["log"] if camlog and camlog.exists() else []
+
+
+def clip_span(raw: Path, log: list[dict], start: float | None, end: float | None) -> tuple[float, float]:
+    """The take's seconds a clip covers: `start` defaults to 0.4 s before the first camera shot (the page-load lead-in
+    is cut), `end` to the take's end."""
+    shots = [e for e in log if e["kind"] == "shot"]
+    if start is None:
+        start = max(0.0, (shots[0]["t"] - 0.4) if shots else 0.0)
+    return start, probe_duration(raw) if end is None else end
+
+
 def build_clip(raw: Path, out: Path, title: str | None, subtitle: str | None, start: float | None,
                end: float | None, captions: bool, tag: str | None, script: Path | None = None) -> None:
-    camlog = raw.with_suffix("").with_suffix(".camlog.json") if raw.suffix == ".webm" else None
-    log = []
-    if camlog and camlog.exists():
-        log = json.loads(camlog.read_text())["log"]
+    log = read_camlog(raw)
     story = json.loads(script.read_text()) if script else None
     if story:
         title = title or story.get("title")
@@ -220,11 +284,7 @@ def build_clip(raw: Path, out: Path, title: str | None, subtitle: str | None, st
         start = start if start is not None else story.get("start")
         end = end if end is not None else story.get("end")
     shots = [e for e in log if e["kind"] == "shot"]
-    if start is None:
-        start = max(0.0, (shots[0]["t"] - 0.4) if shots else 0.0)
-    duration = probe_duration(raw)
-    if end is None:
-        end = duration
+    start, end = clip_span(raw, log, start, end)
     speed = float(story.get("speed", DEFAULT_SPEED)) if story else DEFAULT_SPEED  # beat "at" stays raw seconds
     with tempfile.TemporaryDirectory(prefix="edit-") as tmp_name:  # drawtext files; removed when the encode is done
         tmp = Path(tmp_name)
@@ -247,48 +307,21 @@ def _encode_clip(raw: Path, out: Path, title, subtitle, tag, start: float, end: 
         filters.append(drawtext(tmp / "tag.txt", font=FONT_MONO, size=22, x="w-tw-40", y="h-58", start=0, end=10_000,
                                 color="0xcfd8dc", alpha_fade=False))
     if story and story.get("beats"):
-        beats = []
-        for b in story["beats"]:
-            t_raw = script_time(b["at"], log) + float(b.get("offset", 0))
-            beats.append((rel(t_raw), b))
-        beats.sort(key=lambda x: x[0])
-        boxes = [beat_boxes(b, log) for _, b in beats]  # checked before ffmpeg starts
-        for i, (_, b) in enumerate(beats[:-1]):
-            if b.get("hold"):
-                raise SystemExit(f"hold on beat {b['text']!r} is not allowed: only the clip's last beat can be held")
-        for i, (t0, b) in enumerate(beats):
-            t0 = max(t0, 4.4 if title else 0.2 if speed == 1 else 0.0)  # never under the title card
-            nxt = beats[i + 1][0] if i + 1 < len(beats) else rel(end)
-            dur = float(b.get("dur", min(7.0, nxt - t0 - 0.3)))
-            hold = bool(b.get("hold"))
-            t1 = rel(end) if hold else min(t0 + max(dur, 1.5), rel(end) - 0.1)
-            if t1 - t0 < 1.0:
+        for i, item in enumerate(beat_layout(story["beats"], log, start=start, end=end, speed=speed, title=title)):
+            b = item["beat"]
+            if item["caption"] is None:
                 print(f"skip beat (no room): {b['text']!r}", file=sys.stderr)
                 continue
+            t0, t1 = item["caption"]
             f = tmp / f"beat{i}.txt"
             f.write_text(b["text"])
             y = "120" if b.get("pos") == "top" else "h-150"  # pos=top when the lower third would cover the evidence
             # one look for every beat ("style": "insight" is accepted for old scripts and renders the same)
             filters.append(drawtext(f, font=FONT_BOLD, size=BEAT_SIZE, x="96", y=y, start=t0, end=t1, color="0xffffff",
-                                    fade_out=not hold))
+                                    fade_out=not b.get("hold")))
             placed += 1
-            if boxes[i]:
-                b0 = t0 + box_delay(b, speed)
-                if b0 >= t1:
-                    print(f"skip box (its delay outlasts the caption): {b['text']!r}", file=sys.stderr)
-                    continue
-                band = caption_band(b.get("pos"))
-                for r in boxes[i]:
-                    if r[1] < band[1] and r[1] + r[3] > band[0]:
-                        raise SystemExit(f"box {list(r)} crosses the caption band y {band[0]}-{band[1]} (pos={b.get('pos') or 'bottom'}): "
-                                         f"move the box or set \"pos\" to the other edge")
-                lo, hi = start + b0 * speed, start + t1 * speed  # the box's time in the take's seconds
-                for e in shots:
-                    if lo < e["t"] < hi:
-                        raise SystemExit(f"the camera moves to shot {e.get('key')!r} at {e['t']:.2f} s while the box of "
-                                         f"{b['text']!r} shows ({lo:.2f}-{hi:.2f} s): shorten the caption or move the box")
-                for r in boxes[i]:
-                    filters += drawbox(r, start=b0, end=t1)
+            for r in item["boxes"]:
+                filters += drawbox(r, start=item["box"][0], end=item["box"][1])
     elif captions:
         labelled = [s for s in shots if s.get("label") and rel(s["t"]) > 4.6]
         for i, shot in enumerate(labelled):
@@ -509,6 +542,10 @@ def _narrated_segments(cfg: dict) -> tuple[list[dict], tuple[int, int]]:
                 problems.append(f'{label}: "end" {end:g} s lies beyond the clip (its video is {length:.3f} s long)')
                 continue
             seconds = min(end, length) - start
+            if seconds < 1 / FPS:  # a window that holds no frame encodes to nothing, and ffmpeg then fails
+                problems.append(f'{label}: the window {start:g} to {min(end, length):g} s is shorter than one frame '
+                                f'(1/{FPS} s)')
+                continue
         item = {"name": src.stem, "src": src, "image": is_image, "start": start, "seconds": seconds,
                 "fade_in": float(seg.get("fade_in", fade)), "fade_out": float(seg.get("fade_out", fade)),
                 "group": seg.get("group")}
@@ -601,19 +638,25 @@ def _loudness_filter(track: Path, target: float) -> tuple[str, str | None]:
             f":offset={offset}:linear=true"), note
 
 
-def _voices_off_plan(voices: list[dict], lengths: list[float], gap: float) -> str | None:
+def _voices_off_plan(voices: list[dict], lengths: list[float], gap: float, tail: float) -> str | None:
     """On the encoded parts: two consecutive voices closer than `gap` (or overlapping), or a last voice that ends after
-    the reel. Unreachable while schedule() gets the true window lengths (_narrated_segments refuses a window outside
-    its clip); this guards the reel against a plan made on lengths the encoded parts do not have. A part is whole
-    frames and can come out up to one frame shorter than its window, so one frame per part in between is allowed."""
+    the reel or less than `tail` before its end. Unreachable while schedule() gets the true window lengths
+    (_narrated_segments refuses a window outside its clip); this guards the reel against a plan made on lengths the
+    encoded parts do not have. A part is whole frames and can come out up to one frame shorter than its window, so
+    one frame per part from the first voice to the second (or to the reel's end) is allowed, never below zero: an
+    overlap, or a voice past the end, always stops the reel. Distances are compared to the microsecond (float sums)."""
     for v0, v1 in zip(voices, voices[1:]):
-        if v1["start"] - v0["end"] < gap - (v1["segment"] - v0["segment"]) / FPS:
+        apart = v1["start"] - v0["end"]
+        if round(apart, 6) < max(0.0, gap - (v1["segment"] - v0["segment"]) / FPS):
             return (f"the voices of segment {v0['segment'] + 1} ({v0['name']}) and segment {v1['segment'] + 1} "
-                    f"({v1['name']}) are {v1['start'] - v0['end']:.3f} s apart, less than the gap of {gap:g} s")
-    if voices and voices[-1]["end"] > sum(lengths) + (len(lengths) - voices[-1]["segment"]) / FPS:
-        v = voices[-1]
-        return (f"the voice of segment {v['segment'] + 1} ({v['name']}) ends at {v['end']:.3f} s, "
-                f"after the reel's end at {sum(lengths):.3f} s")
+                    f"({v1['name']}) are {apart:.3f} s apart, less than the gap of {gap:g} s")
+    if voices:
+        v, reel_end = voices[-1], sum(lengths)
+        left = reel_end - v["end"]
+        if round(left, 6) < max(0.0, tail - (len(lengths) - v["segment"]) / FPS):
+            where = (f"after the reel's end at {reel_end:.3f} s" if left < 0 else
+                     f"{left:.3f} s before the reel's end, less than the tail of {tail:g} s")
+            return f"the voice of segment {v['segment'] + 1} ({v['name']}) ends at {v['end']:.3f} s, {where}"
     return None
 
 
@@ -642,7 +685,7 @@ def build_narrated_reel(spec: Path, out: Path) -> None:
         starts = [sum(lengths[:i]) for i in range(len(lengths))]
         voices = [{"segment": i, "name": s["name"], "file": str(s["voice"].resolve()), "start": starts[i] + s["voice_at"],
                    "end": starts[i] + s["voice_at"] + s["voice_seconds"]} for i, s in enumerate(segs) if "voice" in s]
-        if problem := _voices_off_plan(voices, lengths, gap):
+        if problem := _voices_off_plan(voices, lengths, gap, tail):
             raise SystemExit(f"reel: stopped before writing the reel: {problem}")
         lst = tmp / "list.txt"
         lst.write_text("".join(f"file '{p}'\n" for p in parts))

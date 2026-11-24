@@ -447,6 +447,68 @@ def test_reel_stops_when_the_last_voice_would_end_after_the_reel(tmp_path, priva
     assert not out.exists() and not out.with_suffix(".voice.json").exists()
 
 
+def _voices(*spans):
+    """Voices for _voices_off_plan: (segment, start, end) each."""
+    return [{"segment": s, "name": f"v{s}", "start": a, "end": b} for s, a, b in spans]
+
+
+@pytest.mark.parametrize("voices, lengths, gap", [
+    (_voices((0, 0.0, 1.05), (21, 1.0, 1.5)), [0.05] * 20 + [1.0, 2.0], 0.6),   # 21 parts between them: no allowance left
+    (_voices((0, 0.0, 1.02), (1, 1.0, 1.5)), [1.0, 2.0], 0.0),                  # no gap asked, but still an overlap
+])
+def test_two_voices_that_overlap_always_stop_the_reel(voices, lengths, gap):
+    problem = edit_demo._voices_off_plan(voices, lengths, gap, 0.0)
+    assert problem and "less than the gap" in problem and "segment 1 (v0)" in problem
+
+
+def test_the_gap_check_still_allows_one_frame_per_part():
+    """A part can come out up to one frame shorter than its window, so two voices half a frame closer than the gap pass."""
+    voices = _voices((0, 0.3, 1.5), (1, 1.5 + 0.6 - 0.5 / FPS, 2.5))
+    assert edit_demo._voices_off_plan(voices, [2.0, 3.5], 0.6, 1.0) is None
+
+
+@pytest.mark.parametrize("voices, lengths, tail, words", [
+    (_voices((0, 0.3, 2.5)), [0.1] * 20, 1.0, "after the reel's end"),       # 0.5 s past a 20-part reel, on the first part
+    (_voices((0, 0.0, 1.01)), [1.0], 0.0, "after the reel's end"),           # no tail asked: 0.01 s past the end
+    (_voices((0, 0.3, 1.5)), [2.0], 1.0, "less than the tail"),             # 0.5 s left of a 1 s tail
+])
+def test_a_last_voice_past_the_end_or_into_the_tail_stops_the_reel(voices, lengths, tail, words):
+    problem = edit_demo._voices_off_plan(voices, lengths, 0.6, tail)
+    assert problem and words in problem and "segment 1 (v0)" in problem
+
+
+def test_the_tail_check_allows_one_frame_per_part():
+    assert edit_demo._voices_off_plan(_voices((0, 0.3, 1.5)), [2.5 - 0.5 / FPS], 0.6, 1.0) is None
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("case", ["gap", "tail"])
+def test_a_window_that_encodes_a_frame_short_cannot_make_voices_overlap_or_outrun_the_reel(tmp_path, private_tmp, case):
+    """The window 1.99-3.0 s of a 3 s clip holds 30 frames and encodes to 1.000 s, not 1.01 s. With "voice_gap" and
+    "voice_tail" 0 the schedule plans no hold, so a 1.01 s voice on it would overlap the next voice (or run past the
+    reel's end) by 0.01 s."""
+    a, b = make_clip(tmp_path / "a.mp4", 3), make_clip(tmp_path / "b.mp4", 2, "blue")
+    long_voice, short_voice = make_tone(tmp_path / "long.wav", 1.01), make_tone(tmp_path / "short.wav", 0.5)
+    segments = [{"file": str(a), "start": 1.99, "voice": str(long_voice), "voice_at": 0}]
+    if case == "gap":
+        segments.append({"file": str(b), "voice": str(short_voice), "voice_at": 0})
+    spec_path, out = tmp_path / "reel.json", tmp_path / "reel.mp4"
+    spec_path.write_text(json.dumps({"voice_gap": 0, "voice_tail": 0, "fade": 0, "segments": segments}))
+    with pytest.raises(SystemExit) as stop:
+        edit_demo.build_reel(spec_path, out)
+    assert ("less than the gap" if case == "gap" else "after the reel's end") in str(stop.value)
+    assert not out.exists() and not out.with_suffix(".voice.json").exists()
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("window", [{"start": 1.99}, {"start": 1.0, "end": 1.02}])
+def test_a_window_shorter_than_one_frame_stops_the_reel(tmp_path, monkeypatch, window):
+    clip = make_clip(tmp_path / "a.mp4", 2)
+    voice = make_tone(tmp_path / "one.mp3", 0.5)
+    message = _refused(tmp_path, monkeypatch, json.dumps({"segments": [{"file": str(clip), "voice": str(voice), **window}]}))
+    assert "segment 1 (a.mp4)" in message and "shorter than one frame" in message
+
+
 @needs_ffmpeg
 @pytest.mark.parametrize("bad", ["file", "image", "voice"])
 def test_a_file_that_is_not_media_stops_the_reel_with_one_line(tmp_path, monkeypatch, bad):

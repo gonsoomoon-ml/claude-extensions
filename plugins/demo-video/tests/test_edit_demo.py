@@ -264,3 +264,47 @@ def test_hold_is_refused_on_a_beat_that_is_not_the_last(tmp_path, private_tmp):
     video = grey_take(tmp_path, [{"t": 0.5, "kind": "shot", "key": "hero"}])
     with pytest.raises(SystemExit, match="hold"):
         clip_of(tmp_path, video, [{"at": 2.0, "text": "a", "hold": True}, {"at": 6.0, "text": "b"}])
+
+
+def _commands(monkeypatch) -> list:
+    """Record the ffmpeg commands instead of running them (the checks before ffmpeg still run)."""
+    seen = []
+    monkeypatch.setattr(edit_demo, "run", lambda cmd: seen.append(cmd))
+    return seen
+
+
+@needs_ffmpeg
+def test_a_box_on_its_own_anchor_shot_is_not_a_camera_move(tmp_path, private_tmp, monkeypatch):
+    """At 1.25x from 0, a shot at 3.28 s comes back from clip seconds as 3.2799999999999998: without a margin the beat's
+    own anchor shot fell inside the box's time when "box_delay" is 0 and stopped the clip."""
+    assert 0 + (3.28 - 0) / 1.25 * 1.25 < 3.28, "the float rounding this test is about"
+    video = grey_take(tmp_path, [{"t": 0.5, "kind": "shot", "key": "hero"}, {"t": 3.28, "kind": "shot", "key": "focus"}])
+    script = tmp_path / "story.json"
+    script.write_text(json.dumps({"speed": 1.25, "start": 0, "beats": [
+        {"at": "shot:focus", "dur": 3, "text": "look", "box": BOX, "box_delay": 0}]}))
+    seen = _commands(monkeypatch)
+    edit_demo.build_clip(video, tmp_path / "grey.mp4", None, None, None, None, True, None, script)
+    (cmd,) = seen
+    assert "drawbox=x=400:y=300:w=400:h=200" in cmd[cmd.index("-vf") + 1], "the box is drawn"
+
+
+@pytest.mark.parametrize("box", [5, 1.5, True, {"x": 1}])
+def test_a_box_that_is_neither_a_list_nor_a_string_aborts_with_one_line(box):
+    with pytest.raises(SystemExit) as stop:
+        edit_demo.beat_boxes({"box": box, "text": "x"}, LOG)
+    assert str(stop.value).startswith("box ")
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("beat, words", [
+    ({"at": 2.0, "dur": 2, "box_delay": 2.5}, "box_delay"),        # the box would appear after its caption has gone
+    ({"at": 2.0, "dur": 2, "box_delay": 2.0}, "box_delay"),        # ... or just as it goes
+    ({"at": 9.5}, "no room"),                                       # the caption itself is left out
+])
+def test_a_box_that_can_never_show_stops_the_clip_before_ffmpeg(tmp_path, private_tmp, monkeypatch, beat, words):
+    video = grey_take(tmp_path, [{"t": 0.5, "kind": "shot", "key": "hero"}])
+    seen = _commands(monkeypatch)
+    with pytest.raises(SystemExit) as stop:
+        clip_of(tmp_path, video, [{**beat, "text": "late", "box": BOX}])
+    assert seen == [], "ffmpeg never starts"
+    assert str(stop.value).startswith("box ") and words in str(stop.value) and "'late'" in str(stop.value)
