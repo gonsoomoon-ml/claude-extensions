@@ -276,11 +276,16 @@ def beat_layout(beats: list[dict], log: list[dict], *, start: float, end: float,
                 raise SystemExit(f"box {list(r)} crosses the caption band y {band[0]}-{band[1]} (pos={b.get('pos') or 'bottom'}): "
                                  f"move the box or set \"pos\" to the other edge")
         lo, hi = start + b0 * speed, start + b1 * speed  # the box's time in the take's seconds
-        shorten = "the caption" if lengths[i] is None else "\"box_dur\""
+        if lengths[i] is not None:
+            advice = 'shorten "box_dur" or move the box'
+        elif b.get("hold"):
+            advice = 'give the box a "box_dur" or move the box'  # a held caption cannot be shortened
+        else:
+            advice = "shorten the caption or move the box"
         for e in shots:
             if lo + CAMERA_MARGIN < e["t"] < hi - CAMERA_MARGIN:
                 raise SystemExit(f"the camera moves to shot {e.get('key')!r} at {e['t']:.2f} s while the box of "
-                                 f"{b['text']!r} shows ({lo:.2f}-{hi:.2f} s): shorten {shorten} or move the box")
+                                 f"{b['text']!r} shows ({lo:.2f}-{hi:.2f} s): {advice}")
         item.update(box=(b0, b1), box_raw=(lo, hi))
     return layout
 

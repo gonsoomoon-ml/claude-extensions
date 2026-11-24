@@ -346,15 +346,19 @@ def test_box_dur_ends_a_held_box_before_a_later_camera_shot(tmp_path, private_tm
 
 
 @needs_ffmpeg
-@pytest.mark.parametrize("extra, shows, advice", [
-    ({}, "2.50-10.00 s", "shorten the caption or move the box"),               # without box_dur: as before
-    ({"box_dur": 4.0}, "2.50-6.50 s", 'shorten "box_dur" or move the box'),    # a box_dur that still reaches the shot
+@pytest.mark.parametrize("beat, shows, advice", [
+    # a held caption without box_dur: shortening the caption cannot help, a box_dur can
+    (HELD, "2.50-10.00 s", 'give the box a "box_dur" or move the box'),
+    ({**HELD, "box_dur": 4.0}, "2.50-6.50 s", 'shorten "box_dur" or move the box'),   # a box_dur that still reaches the shot
+    # a caption that is not held: the advice stays as it was
+    ({"at": 2.0, "text": "stay", "box": BOX, "box_delay": 0.5, "dur": 6.0}, "2.50-8.00 s",
+     "shorten the caption or move the box"),
 ])
-def test_a_held_box_that_reaches_the_later_shot_stops_the_clip(tmp_path, private_tmp, monkeypatch, extra, shows, advice):
+def test_a_box_that_reaches_the_later_shot_stops_the_clip(tmp_path, private_tmp, monkeypatch, beat, shows, advice):
     video = grey_take(tmp_path, LATER_SHOT)
     seen = _commands(monkeypatch)
     with pytest.raises(SystemExit) as stop:
-        clip_of(tmp_path, video, [{**HELD, **extra}])
+        clip_of(tmp_path, video, [beat])
     assert seen == [], "ffmpeg never starts"
     assert str(stop.value) == (f"the camera moves to shot 'later' at 6.00 s while the box of 'stay' shows ({shows}): "
                                f"{advice}")
