@@ -13,7 +13,7 @@ Inputs: a take from `record_demo.mjs` (webm + camlog, captions anchored to UI ev
 
 ## Pipeline
 
-1. **Selectors**: dump candidate elements with their rects via `page.evaluate` at the recording layout size, or read a screenshot. A `rec.focus` that matches nothing keeps the camera still and writes `missing: true` into the camlog; grep for it before editing.
+1. **Selectors**: dump candidate elements with their rects via `page.evaluate` at the recording layout size. A `rec.focus` that matches nothing keeps the camera still, prints `selector matched nothing` and writes `missing: true` into the camlog; grep for it before editing.
 2. **Script** ([references/script.md](references/script.md)): intro card, chapters (title = what the feature lets the user do, subtitle = where), chapter cards, beats per chapter (`scripts/<stem>.json`, format in `python3 scripts/edit_demo.py --help`), summary card. All cards in one `cards.json`.
 3. **Storyboard** (`storyboard.mjs`, copy `scripts/storyboard.example.mjs`): one async function that navigates, calls `rec.install()`, then alternates shots (`rec.reset` / `rec.region` / `rec.focus`) with `rec.sleep`. Every hold is footage: size them to the target length, and give the first screen after a login or a launch 5 s or more. Fixed holds when you know what happens; an event-probe loop when the UI changes at unpredictable times. `tap(locator)` for clicks; `rec.note('<kind>')` at every event a caption anchors to. End each take on the shot you cut on, not on an exit sequence.
 4. **Record**: `node scripts/record_demo.mjs --url <site> --storyboard ./storyboard.mjs --name <stem> --out raw --playwright-root <dir>` → `raw/<stem>.webm` + `raw/<stem>.camlog.json`. Default layout 1920×1080. When the whole UI fits one screen and should read large, add `--layout 1280x720`: the page is laid out at 1280×720 and zoomed 1.5×, crisp, selectors unchanged. Reseed the app between takes and wait for the new server before recording.
@@ -41,7 +41,7 @@ Take a still every 5 s to find where the UI changes, refine to 0.5 s, write the 
 
 A beat's `"box"` draws a red border while its caption shows; a box shown during a camera move stops the clip with the fix named. `"hold": true` keeps the last caption to the last frame.
 
-Narration: `python3 scripts/edit_demo.py voice lines.json --out voice/` makes one mp3 per line with Amazon Polly. A reel segment takes `"voice"`, `"voice_at"`, `"group"`; a card under narration is a picture segment, `{"image": "card.png", "seconds": 3}`, because a held card clip fades to black. The reel holds each segment's last frame until its voice ends and writes `<reel>.voice.json`. Then `audit`, `boxes`, `sheet`; they cannot hear, so listen on `review.html`. Details: [references/voice-and-highlight.md](references/voice-and-highlight.md).
+Narration: `python3 scripts/edit_demo.py voice lines.json --out voice/` makes one mp3 per line with Amazon Polly. A reel segment takes `"voice"`, `"voice_at"`, `"group"`; a card under narration is a picture segment, `{"image": "card.png", "seconds": 3}`, because a held card clip fades to black. The reel holds each segment's last frame until its voice ends and writes `<reel>.voice.json`. Then the `scripts/check_demo.py` subcommands `audit`, `boxes`, `sheet`; they cannot hear, so listen on `review.html`. Details: [references/voice-and-highlight.md](references/voice-and-highlight.md).
 
 ## Quick reference
 

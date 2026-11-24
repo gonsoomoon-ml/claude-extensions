@@ -144,8 +144,9 @@ def test_every_option_and_field_the_documents_name_exists_in_the_scripts():
     assert {"--readings", "--hangul-only", "--tolerance", "--plan", "--texts", "--boxes", "--raw", "--copy"} <= options
     assert sorted(o for o in options if o not in code and o != "--help") == [], "an option the documents name is not in the scripts"
     quoted = set(re.findall(r"`\"([a-z_]+)\"", docs))
-    bare = set(re.findall(r"`([a-z_]+)`", docs))
-    names = quoted | {"image", "seconds", "voice", "voice_at", "group", "voice_gap", "voice_tail", "loudness"} & bare
+    # every field the documents list in the first cell of a table row (`image`, `seconds` | ...), quoted or bare
+    listed = {n for row in re.findall(r"^\| ([^|]+) \|", docs, re.M) for n in re.findall(r"`\"?([a-z_]+)\"?`", row)}
+    names = quoted | listed
     assert {"box", "box_dur", "box_delay", "hold", "voice", "voice_at", "group", "image", "seconds", "voice_gap", "voice_tail", "loudness"} <= names
     assert sorted(n for n in names if f'"{n}"' not in code) == [], "a field the documents name is not in the scripts"
 
