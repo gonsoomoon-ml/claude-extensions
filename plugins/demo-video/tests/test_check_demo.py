@@ -281,6 +281,23 @@ def test_audit_holds_a_voice_whose_file_is_gone_against_the_plan(tmp_path, tone_
 
 
 @needs_ffmpeg
+def test_audit_hands_no_url_from_the_plan_to_ffmpeg(tmp_path, tone_reel, monkeypatch):
+    """A voice's "file" that is not a file here (a URL) is held against the plan's times, as a missing file is; it never
+    reaches ffmpeg or ffprobe, which would open the connection."""
+    reel, _ = tone_reel
+    plan = json.loads(reel.with_suffix(".voice.json").read_text())
+    plan["voices"][1]["file"] = "http://127.0.0.1:9/x.mp3"
+    (tmp_path / "plan.json").write_text(json.dumps(plan))
+    seen, real = [], subprocess.run
+    monkeypatch.setattr(subprocess, "run", lambda cmd, *a, **kw: (seen.append([str(c) for c in cmd]), real(cmd, *a, **kw))[1])
+    report = check_demo.audit(reel, tmp_path / "plan.json")
+    assert seen and not [c for cmd in seen for c in cmd if c.startswith("http")], "no URL handed to ffmpeg or ffprobe"
+    (warning,) = report["warnings"]
+    assert "voice 2" in warning and "http://127.0.0.1:9/x.mp3" in warning and "plan" in warning
+    assert report["ok"] and report["voices"][1]["expected"] == report["voices"][1]["planned"]
+
+
+@needs_ffmpeg
 def test_audit_names_a_video_and_audio_of_different_lengths(tmp_path, tone_reel):
     reel, _ = tone_reel
     longer = tmp_path / "longer.mp4"

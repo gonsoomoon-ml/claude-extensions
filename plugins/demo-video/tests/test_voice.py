@@ -182,6 +182,39 @@ def test_a_recorded_file_is_used_as_it_is(tmp_path, aws):
 
 
 @needs_ffmpeg
+def test_a_recorded_file_that_is_not_audio_is_refused_before_any_call(tmp_path, aws):
+    notes = tmp_path / "notes.txt"
+    notes.write_text("not audio")
+    out = tmp_path / "v"
+    with pytest.raises(SystemExit) as stop:
+        synth({"a": "첫째 줄입니다", "b": {"audio": str(notes)}}, out)
+    assert "b" in str(stop.value) and "notes.txt" in str(stop.value) and "Traceback" not in str(stop.value)
+    assert aws() == [] and not (out / "b.txt").exists() and not (out / "a.mp3").exists()
+
+
+@needs_ffmpeg
+def test_a_recorded_file_cannot_overwrite_the_index(tmp_path, aws):
+    out = tmp_path / "v"
+    synth({"a": "첫째 줄입니다"}, out)
+    index = (out / "voice.json").read_text()
+    rec = tmp_path / "rec.json"   # an mp3 under another suffix: ffprobe reads it by its content
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "sine=duration=1", "-ac", "1", "-f", "mp3", str(rec)],
+                   check=True)
+    with pytest.raises(SystemExit, match="voice.json"):
+        synth({"a": "첫째 줄입니다", "voice": {"audio": str(rec)}}, out)
+    assert (out / "voice.json").read_text() == index and len(aws()) == 1
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("value", [3, None, ["에스"]])
+def test_a_reading_whose_spoken_form_is_not_a_text_is_refused_before_any_call(tmp_path, aws, value):
+    with pytest.raises(SystemExit) as stop:
+        synth({"a": "S3 버킷"}, tmp_path / "v", readings={"S3": value})
+    assert "S3" in str(stop.value) and "reading" in str(stop.value)
+    assert aws() == []
+
+
+@needs_ffmpeg
 def test_an_empty_line_is_refused(tmp_path, aws):
     with pytest.raises(SystemExit, match="blank"):
         synth({"ok": "좋은 줄입니다", "blank": "   "}, tmp_path / "v")

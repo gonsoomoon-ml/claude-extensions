@@ -9,7 +9,8 @@ audit  The reel's own sound against its plan (<reel stem>.voice.json, written by
        with ffmpeg's silencedetect (-35 dB; 0.35 s of silence parts two voices), in the reel and in each voice file:
        a voice's sound is expected from its planned start + its file's first sound to its planned start + its file's
        last sound (a file runs on past its sound; its sound is found relative to its own peak; the plan's times are used,
-       with a warning, when the file is gone or no longer as long as the plan says).
+       with a warning, when the file is gone, is not a file here (a URL is never opened) or no longer as long as the
+       plan says).
        Problems, one line each: a voice heard more than --tolerance s early or late at either end, a planned voice with
        no sound, sound where no voice is planned, two voices planned to sound closer than 0.35 s (they cannot be told
        apart), video and audio lengths more than 0.1 s apart, an integrated loudness (ffmpeg's ebur128 meter) more than
@@ -274,16 +275,17 @@ def audit(reel: Path, plan_path: Path, *, tolerance: float = VOICE_TOLERANCE,
     expected = []
     for k, v in enumerate(voices, 1):
         file = str(v.get("file") or "")
-        if file not in own:
-            own[file] = _own_sound(Path(file)) if file else None
-        if (now := _file_changed(file, v)) is not None:
+        usable = file if file and Path(file).is_file() else ""   # never a URL or a device: only a file is read
+        if usable not in own:
+            own[usable] = _own_sound(Path(usable)) if usable else None
+        if (now := _file_changed(usable, v)) is not None:
             report["warnings"].append(f"{_label(k, v)}: its file {file} is {now:.2f} s long, the plan says "
                                       f"{v['end'] - v['start']:.2f} s (changed since the reel was built): held against the "
                                       f"plan's times")
             expected.append({"name": v["name"], "start": v["start"], "end": v["end"]})
-        elif (sound := own[file]) is None:
-            report["warnings"].append(f"{_label(k, v)}: found no sound in its file {file or '(none named)'} (missing, "
-                                      f"unreadable or silent): held against the plan's times")
+        elif (sound := own[usable]) is None:
+            report["warnings"].append(f"{_label(k, v)}: found no sound in its file {file or '(none named)'} (missing, not "
+                                      f"a file, unreadable or silent): held against the plan's times")
             expected.append({"name": v["name"], "start": v["start"], "end": v["end"]})
         else:
             expected.append({"name": v["name"], "start": round(v["start"] + sound[0], 4), "end": round(v["start"] + sound[1], 4),

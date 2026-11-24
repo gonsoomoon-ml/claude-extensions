@@ -878,14 +878,24 @@ def synthesize(lines: dict, out: Path, *, voice: str, engine: str, language: str
     A line is a text or {"audio": file} (a recorded file, copied as it is). Every check runs before the first call;
     a line whose spoken text, voice, engine and language are unchanged (and whose file exists) is not synthesized again.
     """
+    index_name = "voice.json"
+    wrong = [f"reading {k!r}: its spoken form must be a text, not {v!r}" for k, v in readings.items() if not isinstance(v, str)]
+    if wrong:
+        raise SystemExit("voice: refused before any call:\n  " + "\n  ".join(wrong))
     problems, texts = [], {}
     for name, line in lines.items():
         if not name or "/" in name or "\\" in name or name.startswith("."):
             problems.append(f"{name!r}: name is not a plain file name (no path separator, not empty, no leading dot)")
             continue
         if isinstance(line, dict):
-            if not Path(str(line.get("audio", ""))).is_file():
+            src = Path(str(line.get("audio", "")))
+            if not src.is_file():
                 problems.append(f"{name}: audio file not found: {line.get('audio')}")
+            elif stream_seconds(src, "a") is None:
+                problems.append(f"{name}: cannot read {src} as audio")
+            elif (name + src.suffix).lower() == index_name:
+                problems.append(f"{name}: its file would be {name + src.suffix}, the index this command writes; rename the "
+                                f"line or the file")
             continue
         if not isinstance(line, str):
             problems.append(f"{name}: neither a text nor an {{\"audio\": file}} object")
@@ -903,7 +913,7 @@ def synthesize(lines: dict, out: Path, *, voice: str, engine: str, language: str
         raise SystemExit("voice: refused before any call:\n  " + "\n  ".join(problems))
 
     out.mkdir(parents=True, exist_ok=True)
-    index = out / "voice.json"
+    index = out / index_name
     try:
         old = json.loads(index.read_text(encoding="utf-8"))
     except (OSError, ValueError):
