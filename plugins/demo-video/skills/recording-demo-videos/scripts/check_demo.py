@@ -8,7 +8,8 @@
 audit  The reel's own sound against its plan (<reel stem>.voice.json, written by `edit_demo.py reel`). Speech is found
        with ffmpeg's silencedetect (-35 dB; 0.35 s of silence parts two voices), in the reel and in each voice file:
        a voice's sound is expected from its planned start + its file's first sound to its planned start + its file's
-       last sound (a file runs on past its sound; the plan's times are used, with a warning, when the file is gone).
+       last sound (a file runs on past its sound; its sound is found relative to its own peak; the plan's times are used,
+       with a warning, when the file is gone or no longer as long as the plan says).
        Problems, one line each: a voice heard more than --tolerance s early or late at either end, a planned voice with
        no sound, sound where no voice is planned, two voices planned to sound closer than 0.35 s (they cannot be told
        apart), video and audio lengths more than 0.1 s apart, an integrated loudness (ffmpeg's ebur128 meter) more than
@@ -54,7 +55,10 @@ from edit_demo import FPS, H, HIGHLIGHT, HIGHLIGHT_THICK, W  # noqa: E402
 SPEECH_NOISE_DB = -35.0      # silencedetect: quieter than this is silence
 SPEECH_MIN_SILENCE = 0.35    # s; a shorter pause stays inside one voice
 MIN_SOUND = 0.05             # s; a shorter burst is left out (rounding at the file's edges, a click)
-EDGE_PAD = 1.0               # s of silence put before and after the decoded sound, so its two ends are found too
+EDGE_PAD = 1.0               # s (at least) of silence put before and after the decoded sound, so its two ends are found too
+OWN_SOUND_RANGE_DB = 33.0    # a voice file's sound is what lies within this many dB of its own peak (the reel's -35 dB
+                             # is about this far below the peak of the voice track once the reel has lifted it)
+FILE_LENGTH_TOLERANCE = 0.05  # s a voice file may differ from the length the plan records before it counts as changed
 VOICE_TOLERANCE = 0.25       # s a voice may start or end away from its plan
 LENGTH_TOLERANCE = 0.1       # s between the video's and the audio's length
 LOUDNESS_TOLERANCE = 1.5     # LU around the target (edit_demo.VOICE_LOUDNESS, -16 LUFS)
@@ -91,13 +95,14 @@ def _write_json(path: Path, data: dict) -> None:
 def speech_intervals(path: Path, noise_db: float = SPEECH_NOISE_DB,
                      min_silence: float = SPEECH_MIN_SILENCE) -> list[tuple[float, float]]:
     """Where a file's sound is louder than `noise_db`, as (start, end) seconds: what lies between silences of at least
-    `min_silence` s (ffmpeg silencedetect on the first audio stream). EDGE_PAD s of silence is put before and after the
-    decoded sound, so a silence at either end of the file counts however short (a first voice 0.3 s into a reel starts
+    `min_silence` s (ffmpeg silencedetect on the first audio stream). Silence (EDGE_PAD s, or longer than `min_silence`)
+    is put before and after the decoded sound, so a silence at either end of the file counts however short (a first voice 0.3 s into a reel starts
     at 0.3), and the sound ends where it stops, not at the file's stated length (an mp3 states more than it decodes).
     Bursts under MIN_SOUND s are left out."""
     if edit_demo.stream_seconds(path, "a") is None:
         raise SystemExit(f"cannot read an audio stream in {path}")
-    pad = f"adelay=delays={EDGE_PAD * 1000:g}:all=1,apad=pad_dur={EDGE_PAD:g}"
+    edge = max(EDGE_PAD, min_silence + 0.1)   # long enough for the last sound to be followed by a silence that is seen
+    pad = f"adelay=delays={edge * 1000:g}:all=1,apad=pad_dur={edge:g}"
     done = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", str(path), "-map", "0:a:0",
                            "-af", f"{pad},silencedetect=n={noise_db:g}dB:d={min_silence:g}", "-f", "null", "-"],
                           capture_output=True, text=True)
@@ -106,9 +111,9 @@ def speech_intervals(path: Path, noise_db: float = SPEECH_NOISE_DB,
     silences, opened = [], None
     for kind, value in re.findall(r"silence_(start|end): (-?[\d.]+)", done.stderr):
         if kind == "start":
-            opened = float(value) - EDGE_PAD
+            opened = float(value) - edge
         else:
-            silences.append((-EDGE_PAD if opened is None else opened, float(value) - EDGE_PAD))
+            silences.append((-edge if opened is None else opened, float(value) - edge))
             opened = None
     if opened is not None:   # ffmpeg 4.4 closes the last silence at the end of what it reads; an open one runs on
         silences.append((opened, math.inf))
@@ -181,14 +186,34 @@ def close_voices(planned: list[dict], min_silence: float = SPEECH_MIN_SILENCE) -
     return groups, problems
 
 
+def _peak_db(path: Path) -> float | None:
+    """The highest sample level of a file's first audio stream in dB (ffmpeg volumedetect); None when not measured."""
+    done = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", str(path), "-map", "0:a:0", "-af", "volumedetect",
+                           "-f", "null", "-"], capture_output=True, text=True)
+    m = re.search(r"max_volume: (-?[\d.]+) dB", done.stderr) if done.returncode == 0 else None
+    return float(m.group(1)) if m else None
+
+
 def _own_sound(path: Path) -> tuple[float, float] | None:
-    """Where a voice file's own sound begins and ends, seconds into the file (the same detection as in the reel);
-    None when the file cannot be read or holds no sound."""
+    """Where a voice file's own sound begins and ends, seconds into the file; None when the file cannot be read or
+    holds no sound. The reel lifts its voice track to the loudness target, so the file's sound is found relative to
+    the file's own level: OWN_SOUND_RANGE_DB below its peak, never above the reel's own threshold."""
+    peak = _peak_db(path)
+    noise = SPEECH_NOISE_DB if peak is None else min(SPEECH_NOISE_DB, peak - OWN_SOUND_RANGE_DB)
     try:
-        found = speech_intervals(path)
+        found = speech_intervals(path, noise_db=noise)
     except SystemExit:
         return None
     return (found[0][0], found[-1][1]) if found else None
+
+
+def _file_changed(file: str, v: dict) -> float | None:
+    """The file's length now when it is not the length the plan records for the voice (`end - start`, as the reel step
+    measured the file), else None."""
+    now = edit_demo.stream_seconds(Path(file), "a") if file else None
+    if now is not None and abs(now - (v["end"] - v["start"])) > FILE_LENGTH_TOLERANCE:
+        return now
+    return None
 
 
 def _plan_voice_problem(k: int, v) -> str | None:
@@ -244,7 +269,12 @@ def audit(reel: Path, plan_path: Path, *, tolerance: float = VOICE_TOLERANCE,
         file = str(v.get("file") or "")
         if file not in own:
             own[file] = _own_sound(Path(file)) if file else None
-        if (sound := own[file]) is None:
+        if (now := _file_changed(file, v)) is not None:
+            report["warnings"].append(f"{_label(k, v)}: its file {file} is {now:.2f} s long, the plan says "
+                                      f"{v['end'] - v['start']:.2f} s (changed since the reel was built): held against the "
+                                      f"plan's times")
+            expected.append({"name": v["name"], "start": v["start"], "end": v["end"]})
+        elif (sound := own[file]) is None:
             report["warnings"].append(f"{_label(k, v)}: found no sound in its file {file or '(none named)'} (missing, "
                                       f"unreadable or silent): held against the plan's times")
             expected.append({"name": v["name"], "start": v["start"], "end": v["end"]})

@@ -47,6 +47,16 @@ def make_tone(path: Path, seconds: float, freq: int = 440) -> Path:
     return path
 
 
+def make_voice(path: Path, lead: float, tone: float, trail: float, freq: int = 440, gain_db: int = -6, fade: float = 0.0) -> Path:
+    """A voice file whose sound starts `lead` s in and stops `trail` s before its end (a tone of `tone` s, which fades
+    in and out over `fade` s when given), so a test knows where its sound lies."""
+    fades = f",afade=t=in:d={fade},afade=t=out:st={tone - fade}:d={fade}" if fade else ""
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", f"sine=frequency={freq}:sample_rate=24000:duration={tone}",
+                    "-af", f"volume={gain_db}dB{fades},adelay={round(lead * 1000)},apad=pad_dur={trail}", "-ac", "1", str(path)],
+                   check=True)
+    return path
+
+
 def build_reel(tmp_path: Path, segments: list[dict], name: str = "reel") -> tuple[Path, dict]:
     spec_path = tmp_path / f"{name}.json"
     spec_path.write_text(json.dumps({"segments": segments}))
@@ -70,13 +80,25 @@ def with_sound_moved(reel: Path, seconds: float, out: Path) -> Path:
     return out
 
 
-def tone_frequency(sound: bytes, tmp: Path) -> float:
-    """The frequency of the tone in a piece of sound: zero crossings over the part louder than a tenth of its peak."""
+def _samples(sound: bytes, tmp: Path) -> array.array:
     path = tmp / "row-sound.bin"
     path.write_bytes(sound)
     pcm = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-f", "s16le", "-ac", "1", "-ar", "48000", "-"],
                          check=True, capture_output=True).stdout
-    samples = array.array("h", pcm)
+    return array.array("h", pcm)
+
+
+def loud_span(sound: bytes, tmp: Path) -> tuple[float, float, float]:
+    """Where the part of a piece of sound louder than a tenth of its peak starts and ends, and the sound's length (s)."""
+    samples = _samples(sound, tmp)
+    peak = max(abs(s) for s in samples)
+    loud = [i for i, s in enumerate(samples) if abs(s) > peak / 10]
+    return loud[0] / 48000, (loud[-1] + 1) / 48000, len(samples) / 48000
+
+
+def tone_frequency(sound: bytes, tmp: Path) -> float:
+    """The frequency of the tone in a piece of sound: zero crossings over the part louder than a tenth of its peak."""
+    samples = _samples(sound, tmp)
     peak = max(abs(s) for s in samples)
     loud = [i for i, s in enumerate(samples) if abs(s) > peak / 10]
     a, b = loud[0], loud[-1]
@@ -312,6 +334,56 @@ def test_wrongly_shaped_input_stops_with_one_line(tmp_path, tone_reel, case):
     assert done.returncode == 1 and "Traceback" not in done.stderr
 
 
+@needs_ffmpeg
+def test_speech_intervals_closes_the_last_sound_whatever_the_silence_asked_for(tmp_path):
+    """min_silence above the silence put around the sound must not drop the last sound."""
+    tone = make_tone(tmp_path / "t.mp3", 1.5)
+    for silence in (0.35, 0.9, 1.2, 2.0):
+        (a, b), = check_demo.speech_intervals(tone, min_silence=silence)
+        assert a == pytest.approx(0.0, abs=0.05) and b == pytest.approx(1.5, abs=0.05), silence
+    bursts = tmp_path / "b.wav"
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i",
+                    "aevalsrc=0.5*sin(2*PI*440*t)*(between(t\\,0.2\\,1.2)+between(t\\,2.3\\,3.3)):s=24000:d=4", str(bursts)], check=True)
+    assert len(check_demo.speech_intervals(bursts, min_silence=0.9)) == 2
+    (a, b), = check_demo.speech_intervals(bursts, min_silence=2.0)
+    assert a == pytest.approx(0.2, abs=0.05) and b == pytest.approx(3.3, abs=0.05)
+
+
+@needs_ffmpeg
+def test_audit_names_a_voice_file_changed_since_the_reel_was_built(tmp_path, tone_reel):
+    """A file of another length than the plan says is held against the plan's times, with a warning, instead of being
+    trusted to say where its sound is."""
+    reel, _ = tone_reel
+    moved = with_sound_moved(reel, -0.35, tmp_path / "moved.mp4")   # the reel's sound ends early by more than the tolerance
+    plan = json.loads(reel.with_suffix(".voice.json").read_text())
+    swapped = plan["voices"][1]["end"] - plan["voices"][1]["start"] - 0.35
+    plan["voices"][1]["file"] = str(make_tone(tmp_path / "two.mp3", swapped, 660))   # a file that now matches the damaged reel
+    (tmp_path / "plan.json").write_text(json.dumps(plan))
+    done = cli("audit", moved, "--plan", tmp_path / "plan.json", "--out", tmp_path / "audit.json")
+    report = json.loads((tmp_path / "audit.json").read_text())
+    assert done.returncode == 1, "the plan's times show the shift the swapped file would hide"
+    (warning,) = [w for w in report["warnings"] if "changed since the reel was built" in w]
+    assert "voice 2" in warning and "two.mp3" in warning
+    assert report["voices"][1]["file_sound"] is None and report["voices"][1]["expected"] == report["voices"][1]["planned"]
+    intact = cli("audit", reel, "--plan", reel.with_suffix(".voice.json"), "--out", tmp_path / "ok.json")
+    assert intact.returncode == 0 and not json.loads((tmp_path / "ok.json").read_text())["warnings"]
+
+
+@needs_ffmpeg
+def test_audit_passes_a_correct_reel_whose_voice_files_are_much_quieter(tmp_path):
+    """The reel lifts its voice track to the loudness target: files 20 dB quieter than usual, with soft edges, have
+    their own sound found relative to their own level, so its onset and end are the moments the lifted reel has them."""
+    clips = [make_clip(tmp_path / f"c{i}.mp4", 6, c) for i, c in enumerate(["red", "blue"])]
+    voices = [make_voice(tmp_path / "one.mp3", 0.2, 3.0, 0.4, 440, -26, fade=1.0),
+              make_voice(tmp_path / "two.mp3", 0.5, 2.5, 0.4, 550, -26, fade=1.0)]
+    reel, _ = build_reel(tmp_path, [{"file": str(c), "voice": str(v), "voice_at": 0.3} for c, v in zip(clips, voices)])
+    done = cli("audit", reel, "--out", tmp_path / "audit.json")
+    report = json.loads((tmp_path / "audit.json").read_text())
+    assert done.returncode == 0, report["problems"]
+    for v in report["voices"]:
+        assert abs(v["start_off"]) < 0.2 and abs(v["end_off"]) < 0.2
+
+
 def test_the_clip_steps_helpers_are_used_by_their_public_names():
     assert not re.findall(r"edit_demo\._\w+", CHECK.read_text())
     assert callable(edit_demo.stream_seconds) and callable(edit_demo.write_json_atomic)
@@ -373,9 +445,9 @@ def test_boxes_reads_a_smaller_take_as_the_clip_scales_it(tmp_path):
 def test_sheet_writes_one_row_per_voice_in_one_html_file(tmp_path):
     a, b, c = make_clip(tmp_path / "a.mp4", 3), make_clip(tmp_path / "b.mp4", 3, "blue"), make_clip(tmp_path / "c.mp4", 2, "green")
     reel, plan = build_reel(tmp_path, [
-        {"file": str(a), "voice": str(make_tone(tmp_path / "one.mp3", 1.5)), "voice_at": 0.3},
-        {"file": str(b), "voice": str(make_tone(tmp_path / "two.mp3", 1.0, freq=550)), "voice_at": 0.5},
-        {"file": str(c), "voice": str(make_tone(tmp_path / "three.mp3", 1.0, freq=660)), "voice_at": 0.2}])
+        {"file": str(a), "voice": str(make_voice(tmp_path / "one.mp3", 0.4, 1.0, 0.3, 440)), "voice_at": 0.3},
+        {"file": str(b), "voice": str(make_voice(tmp_path / "two.mp3", 0.3, 0.8, 0.4, 550)), "voice_at": 0.5},
+        {"file": str(c), "voice": str(make_voice(tmp_path / "three.mp3", 0.5, 0.6, 0.3, 660)), "voice_at": 0.2}])
     take = make_take(tmp_path / "take.webm", STRIPE, seconds=6)
     assert cli("boxes", box_script(tmp_path), "--raw", take, "--out", tmp_path / "a.boxes.json").returncode == 0
     texts = tmp_path / "texts.json"
@@ -415,5 +487,8 @@ def test_sheet_writes_one_row_per_voice_in_one_html_file(tmp_path):
     pictures = [s for s in sources if s.startswith("data:image/jpeg;base64,")]
     assert len(pictures) == 3 * 3 + 1, "three frames a row and one crop for the one box"
     sounds = [base64.b64decode(s.split(",", 1)[1]) for s in sources if s.startswith("data:audio/")]
-    for sound, freq in zip(sounds, [440, 550, 660], strict=True):
+    for sound, freq, (lead, tone, trail) in zip(sounds, [440, 550, 660], [(0.4, 1.0, 0.3), (0.3, 0.8, 0.4), (0.5, 0.6, 0.3)], strict=True):
         assert tone_frequency(sound, tmp_path) == pytest.approx(freq, rel=0.05), "each row plays its own voice"
+        first, last, length = loud_span(sound, tmp_path)   # the window is the voice's own: its silences at both ends, no more
+        assert first == pytest.approx(lead, abs=0.15) and length - last == pytest.approx(trail, abs=0.15)
+        assert length == pytest.approx(lead + tone + trail, abs=0.15)
