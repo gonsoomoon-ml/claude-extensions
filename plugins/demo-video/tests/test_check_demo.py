@@ -469,6 +469,26 @@ def test_boxes_ends_a_box_where_its_box_dur_ends(tmp_path):
 # ---------------------------------------------------------------- sheet
 
 @needs_ffmpeg
+def test_sheet_says_which_texts_keys_match_no_voice_and_which_voices_have_no_entry(tmp_path):
+    """A texts file keyed by the wrong names used to give an empty page with no word; the page and exit 0 stay, stderr speaks."""
+    a, b = make_clip(tmp_path / "a.mp4", 3), make_clip(tmp_path / "b.mp4", 3, "blue")
+    reel, plan = build_reel(tmp_path, [
+        {"file": str(a), "voice": str(make_voice(tmp_path / "one.mp3", 0.4, 1.0, 0.3, 440)), "voice_at": 0.3},
+        {"file": str(b), "voice": str(make_voice(tmp_path / "two.mp3", 0.3, 0.8, 0.4, 550)), "voice_at": 0.5}])
+    texts = tmp_path / "texts.json"
+    texts.write_text(json.dumps({"a": {"say": "one"}, "one": {"say": "wrong key"}, "two": {"say": "wrong key"}}))
+    out = tmp_path / "review"
+    done = cli("sheet", reel, "--plan", reel.with_suffix(".voice.json"), "--texts", texts, "--out", out)
+    assert done.returncode == 0, done.stderr
+    lines = [l for l in done.stderr.splitlines() if "texts" in l]
+    assert "sheet: texts key 'one' matches no voice of the plan (voices: a, b)" in lines
+    assert "sheet: texts key 'two' matches no voice of the plan (voices: a, b)" in lines
+    assert "sheet: voice 2 (b) has no entry in the texts file" in lines
+    assert not any("'a'" in l or "voice 1" in l for l in lines), "a matching key and a voice with an entry are not reported"
+    assert (out / "review.html").exists() and len(json.loads((out / "index.json").read_text())["rows"]) == 2
+
+
+@needs_ffmpeg
 def test_sheet_writes_one_row_per_voice_in_one_html_file(tmp_path):
     a, b, c = make_clip(tmp_path / "a.mp4", 3), make_clip(tmp_path / "b.mp4", 3, "blue"), make_clip(tmp_path / "c.mp4", 2, "green")
     reel, plan = build_reel(tmp_path, [

@@ -24,8 +24,10 @@ boxes  Each highlight box of a clip script, measured on the raw take, never on t
        screen under the box changed). A flag says "look at this row", not a failure: exit 0 whatever the flags.
 sheet  One row per voice of the plan: the finished reel's frames at the voice's start + 0.5 s, its middle and its
        end - 0.2 s, an enlarged crop of each box (from --boxes reports, matched to a voice by the clip's name), the
-       caption, the narration, what each box points at, the flags and the times. texts.json: {"<voice name>":
-       {"caption": "...", "say": "...", "what": ["..."], "sources": ["..."]}}, every field optional. Writes
+       caption, the narration, what each box points at, the flags and the times. texts.json: {"<name of a voice in the plan>":
+       {"caption": "...", "say": "...", "what": ["..."], "sources": ["..."]}}, every field optional; a voice's name is the
+       stem of its segment's clip or picture file (copy it from the plan); a key that matches no voice and a voice with no
+       entry are named on stderr. Writes
        <out>/index.json, one JPEG per row and <out>/review.html: one file with every picture and each voice's sound
        inside it, to send as it is. Its top lists every row and the flagged rows as links to the rows (in-page links
        only); a flagged row's card has a red edge.
@@ -590,7 +592,7 @@ def build_sheet(reel: Path, plan_path: Path, texts_path: Path, boxes_paths: list
     if not isinstance(plan, dict) or not isinstance(plan.get("voices"), list):
         raise SystemExit(f"the plan {plan_path} has no list of voices")
     if not isinstance(texts, dict) or not all(isinstance(t, dict) for t in texts.values()):
-        raise SystemExit(f'{texts_path} must hold {{"<voice name>": {{"caption", "say", "what", "sources"}}, ...}}')
+        raise SystemExit(f'{texts_path} must hold {{"<name of a voice in the plan>": {{"caption", "say", "what", "sources"}}, ...}}')
     boxes_by_name: dict[str, list[dict]] = {}
     for path in boxes_paths:
         report = _read_json(path, "the boxes report")
@@ -603,6 +605,13 @@ def build_sheet(reel: Path, plan_path: Path, texts_path: Path, boxes_paths: list
     scale = int(edit_demo.probe_size(reel).split("x")[0]) / W
     segments = plan.get("segments", [])
     out.mkdir(parents=True, exist_ok=True)
+    names = [v["name"] for v in plan.get("voices", [])]
+    for key in texts:  # a texts file keyed by other names gives an empty page: say so, still write the page
+        if key not in names:
+            print(f"sheet: texts key {key!r} matches no voice of the plan (voices: {', '.join(dict.fromkeys(names))})", file=sys.stderr)
+    for k, name in enumerate(names, 1):
+        if name not in texts:
+            print(f"sheet: voice {k} ({name}) has no entry in the texts file", file=sys.stderr)
     rows, sections = [], []
     for k, v in enumerate(plan.get("voices", []), 1):
         text = texts.get(v["name"]) or {}
@@ -669,7 +678,7 @@ def main() -> None:
     s = sub.add_parser("sheet", help="one row per voice and review.html, one file to send")
     s.add_argument("reel", type=Path)
     s.add_argument("--plan", type=Path, required=True)
-    s.add_argument("--texts", type=Path, required=True, help='JSON: {"<voice name>": {"caption", "say", "what", "sources"}}')
+    s.add_argument("--texts", type=Path, required=True, help='JSON: {"<name of a voice in the plan>": {"caption", "say", "what", "sources"}}')
     s.add_argument("--boxes", type=Path, nargs="+", action="extend", default=[], help="reports of `boxes`")
     s.add_argument("--out", type=Path, required=True, help="folder for index.json, the JPEGs and review.html")
     args = ap.parse_args()
