@@ -28,7 +28,13 @@ if args[:2] != ["polly", "synthesize-speech"]:
 rest = args[2:]
 opts, positional, i = {{}}, [], 0
 while i < len(rest):
-    if rest[i].startswith("--"):
+    if rest[i] == "--text":
+        sys.stderr.write("stand-in aws: --text must be one argument (--text=<text>)\\n")
+        sys.exit(2)
+    if rest[i].startswith("--text="):
+        opts["--text"] = rest[i][len("--text="):]
+        i += 1
+    elif rest[i].startswith("--"):
         opts[rest[i]] = rest[i + 1]
         i += 2
     else:
@@ -212,3 +218,76 @@ def test_cli_prints_only_the_json_on_stdout(tmp_path, aws):
                           capture_output=True, text=True)
     assert proc.returncode == 0, proc.stderr
     assert json.loads(proc.stdout)["a"]["spoken"] == "엠씨피 줄"
+
+
+@needs_ffmpeg
+def test_a_text_that_begins_with_a_dash_reaches_the_cli_whole(tmp_path, aws):
+    synth({"a": "- 첫째 항목입니다"}, tmp_path / "v")
+    assert aws()[0]["--text"] == "- 첫째 항목입니다"
+
+
+@needs_ffmpeg
+def test_quotes_and_a_line_break_are_passed_whole(tmp_path, aws):
+    text = '그는 "안녕"이라고 \'말했습니다\'\n다음 줄입니다'
+    synth({"a": text}, tmp_path / "v")
+    assert aws()[0]["--text"] == text
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("text", ["file:///etc/hostname", "  fileb://x", "https://example.com/a", "http://example.com"])
+def test_a_text_the_cli_would_load_is_refused_before_any_call(tmp_path, aws, text):
+    with pytest.raises(SystemExit, match="bad"):
+        synth({"ok": "좋은 줄입니다", "bad": text}, tmp_path / "v")
+    assert aws() == []
+
+
+@needs_ffmpeg
+def test_a_reading_that_empties_a_line_is_refused(tmp_path, aws):
+    with pytest.raises(SystemExit, match="blank"):
+        synth({"a": "MCP"}, tmp_path / "v", readings={"MCP": ""})
+    assert aws() == []
+
+
+@needs_ffmpeg
+def test_a_value_that_is_not_a_text_or_audio_object_is_refused_with_its_own_message(tmp_path, aws):
+    with pytest.raises(SystemExit, match="neither"):
+        synth({"a": 5}, tmp_path / "v")
+    assert aws() == []
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("name", ["../x", "a/b", ".hidden", ""])
+def test_a_name_that_is_not_a_plain_file_name_is_refused(tmp_path, aws, name):
+    with pytest.raises(SystemExit, match="name"):
+        synth({name: "한 줄입니다"}, tmp_path / "v")
+    assert aws() == []
+    assert not (tmp_path / "x.mp3").exists()
+
+
+@needs_ffmpeg
+def test_an_entry_of_a_changed_line_is_dropped_at_once(tmp_path, aws):
+    out = tmp_path / "v"
+    synth({"a": "첫째 줄입니다", "b": "둘째 줄입니다"}, out)
+    with pytest.raises(SystemExit):  # x fails first, so a (changed) is never reached: its old entry must still be gone
+        synth({"x": "FAIL 줄", "a": "첫째 줄이 바뀝니다", "b": "둘째 줄입니다"}, out)
+    assert list(json.loads((out / "voice.json").read_text())) == ["b"]
+
+
+@needs_ffmpeg
+def test_a_failed_call_on_a_line_with_an_older_file_leaves_neither_file_nor_entry(tmp_path, aws):
+    out = tmp_path / "v"
+    synth({"a": "첫째 줄입니다"}, out)
+    assert (out / "a.mp3").exists()
+    with pytest.raises(SystemExit):
+        synth({"a": "FAIL 바뀐 줄"}, out)
+    assert not (out / "a.mp3").exists()
+    assert json.loads((out / "voice.json").read_text()) == {}
+
+
+@needs_ffmpeg
+def test_cli_says_in_one_line_when_a_json_file_is_not_an_object(tmp_path, aws):
+    lines = tmp_path / "lines.json"
+    lines.write_text('["a"]')
+    proc = subprocess.run([sys.executable, str(SCRIPTS / "edit_demo.py"), "voice", str(lines), "--out", str(tmp_path / "v")],
+                          capture_output=True, text=True)
+    assert proc.returncode != 0 and "JSON object" in proc.stderr and "Traceback" not in proc.stderr

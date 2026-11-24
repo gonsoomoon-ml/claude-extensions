@@ -2,9 +2,9 @@
 """Turn raw Playwright recordings (webm + camlog.json) into LinkedIn-ready MP4 clips.
 
   python3 edit_demo.py clip raw/intro.webm --script scripts/intro.json
-  python3 edit_demo.py voice lines.json --out voice/ [--readings readings.json] [--hangul-only]   # Amazon Polly narration
   python3 edit_demo.py clip raw/intro.webm --title "…" --subtitle "…"      # no story: shot labels as captions
   python3 edit_demo.py reel reel.json --out reel.mp4
+  python3 edit_demo.py voice lines.json --out voice/ [--readings readings.json] [--hangul-only]   # Amazon Polly narration
 
 `clip` trims the page-load lead-in, burns a title card and lower-third captions, plays the take at 1.25x
 (DEFAULT_SPEED; set "speed" in the script to change it, e.g. 4 for a waiting stretch, 1 for real time) and
@@ -355,6 +355,7 @@ def build_reel(spec: Path, out: Path, copy: bool = False) -> None:
 
 # ---------------------------------------------------------------- voice (Amazon Polly through the AWS CLI)
 
+CLI_LOADS = ("file://", "fileb://", "http://", "https://")  # the AWS CLI reads a parameter value with these prefixes
 MAX_LINE_CHARS = 1000  # one call per line; the service limits a call's text and this tool does not split lines
 
 
@@ -391,15 +392,22 @@ def synthesize(lines: dict, out: Path, *, voice: str, engine: str, language: str
     """
     problems, texts = [], {}
     for name, line in lines.items():
+        if not name or "/" in name or "\\" in name or name.startswith("."):
+            problems.append(f"{name!r}: name is not a plain file name (no path separator, not empty, no leading dot)")
+            continue
         if isinstance(line, dict):
             if not Path(str(line.get("audio", ""))).is_file():
                 problems.append(f"{name}: audio file not found: {line.get('audio')}")
             continue
-        if not isinstance(line, str) or not line.strip():
-            problems.append(f"{name}: blank line")
+        if not isinstance(line, str):
+            problems.append(f"{name}: neither a text nor an {{\"audio\": file}} object")
             continue
         texts[name] = spoken(line, readings)
-        if len(texts[name]) > MAX_LINE_CHARS:
+        if not texts[name].strip():
+            problems.append(f"{name}: blank line")
+        elif texts[name].lstrip().lower().startswith(CLI_LOADS):
+            problems.append(f"{name}: text begins with a prefix the AWS CLI would load instead of speak ({', '.join(CLI_LOADS)})")
+        elif len(texts[name]) > MAX_LINE_CHARS:
             problems.append(f"{name}: line too long ({len(texts[name])} characters, at most {MAX_LINE_CHARS})")
         elif hangul_only and unreadable(texts[name]):
             problems.append(f"{name}: not Hangul only, left: {', '.join(unreadable(texts[name]))}")
@@ -412,7 +420,8 @@ def synthesize(lines: dict, out: Path, *, voice: str, engine: str, language: str
         old = json.loads(index.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         old = {}
-    entries = {n: old[n] for n in lines if isinstance(old.get(n), dict)}
+    entries = {n: old[n] for n in lines if isinstance(old.get(n), dict)
+               and (n not in texts or old[n].get("key") == _voice_key(texts[n], voice, engine, language))}
     for name, line in lines.items():
         if isinstance(line, dict):
             src = Path(line["audio"])
@@ -431,7 +440,7 @@ def synthesize(lines: dict, out: Path, *, voice: str, engine: str, language: str
             continue
         cmd = ["aws", "polly", "synthesize-speech"] + (["--region", region] if region else []) + [
             "--engine", engine, "--language-code", language, "--voice-id", voice,
-            "--output-format", "mp3", "--text", text, str(target)]
+            "--output-format", "mp3", f"--text={text}", str(target)]
         print(f"voice: {name}: synthesizing {len(text)} characters", file=sys.stderr)
         try:
             done = subprocess.run(cmd, capture_output=True, text=True)
@@ -443,6 +452,8 @@ def synthesize(lines: dict, out: Path, *, voice: str, engine: str, language: str
             _write_json_atomic(index, entries)
             raise SystemExit(f"voice: {name}: aws polly synthesize-speech failed ({done.returncode}): "
                              f"{(done.stderr or done.stdout).strip()}")
+        if not target.is_file():
+            raise SystemExit(f"voice: {name}: aws polly synthesize-speech exited 0 but wrote no audio file")
         entries[name] = {"file": target.name, "seconds": round(probe_duration(target), 2), "spoken": text, "key": key}
         _write_json_atomic(index, entries)
     result = {n: entries[n] for n in lines}
@@ -478,8 +489,16 @@ def main() -> None:
     v.add_argument("--hangul-only", action="store_true", help="refuse a line that still holds Latin letters or digits")
     a = ap.parse_args()
     if a.cmd == "voice":
-        readings = json.loads(a.readings.read_text(encoding="utf-8")) if a.readings else {}
-        result = synthesize(json.loads(a.lines.read_text(encoding="utf-8")), a.out, voice=a.voice, engine=a.engine,
+        def load_object(path: Path) -> dict:
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as e:
+                raise SystemExit(f"voice: cannot read {path} as JSON: {e}")
+            if not isinstance(data, dict):
+                raise SystemExit(f"voice: {path} must hold one JSON object")
+            return data
+        readings = load_object(a.readings) if a.readings else {}
+        result = synthesize(load_object(a.lines), a.out, voice=a.voice, engine=a.engine,
                             language=a.language, region=a.region, readings=readings, hangul_only=a.hangul_only)
         print(json.dumps(result, ensure_ascii=False))
         return
