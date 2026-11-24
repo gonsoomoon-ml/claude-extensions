@@ -3,6 +3,7 @@
 Needs ffmpeg/ffprobe and Pillow. Tones made with ffmpeg stand in for narration lines, plain-colour clips for takes,
 pictures drawn with Pillow for frames.
 """
+import array
 import base64
 import importlib.util
 import json
@@ -52,6 +53,46 @@ def build_reel(tmp_path: Path, segments: list[dict], name: str = "reel") -> tupl
     out = tmp_path / f"{name}.mp4"
     edit_demo.build_reel(spec_path, out)
     return out, json.loads(out.with_suffix(".voice.json").read_text())
+
+
+def audio_seconds(path: Path) -> float:
+    return float(subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=duration",
+                                 "-of", "csv=p=0", str(path)], check=True, capture_output=True, text=True).stdout)
+
+
+def with_sound_moved(reel: Path, seconds: float, out: Path) -> Path:
+    """The reel with all its sound `seconds` later (earlier when negative) and as long as before; the picture copied."""
+    length, ms = audio_seconds(reel), round(abs(seconds) * 1000)
+    af = (f"adelay={ms}|{ms},atrim=end={length:.4f}" if seconds > 0 else
+          f"atrim=start={-seconds:.4f},asetpts=PTS-STARTPTS,apad=whole_dur={length:.4f}")
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(reel), "-filter_complex", f"[0:a]{af}[a]", "-map", "0:v", "-map", "[a]",
+                    "-c:v", "copy", "-c:a", "aac", "-b:a", "96k", str(out)], check=True)
+    return out
+
+
+def tone_frequency(sound: bytes, tmp: Path) -> float:
+    """The frequency of the tone in a piece of sound: zero crossings over the part louder than a tenth of its peak."""
+    path = tmp / "row-sound.bin"
+    path.write_bytes(sound)
+    pcm = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-f", "s16le", "-ac", "1", "-ar", "48000", "-"],
+                         check=True, capture_output=True).stdout
+    samples = array.array("h", pcm)
+    peak = max(abs(s) for s in samples)
+    loud = [i for i, s in enumerate(samples) if abs(s) > peak / 10]
+    a, b = loud[0], loud[-1]
+    crossings = sum(1 for i in range(a, b) if (samples[i] < 0) != (samples[i + 1] < 0))
+    return crossings / 2 / ((b - a) / 48000)
+
+
+@pytest.fixture(scope="module")
+def tone_reel(tmp_path_factory):
+    """Three clips whose voices are mp3 tones: like a speech line, an mp3 runs on past its sound."""
+    d = tmp_path_factory.mktemp("tone-reel")
+    segments = [{"file": str(make_clip(d / f"c{i}.mp4", 4, colour)), "voice": str(make_tone(d / f"v{i}.mp3", seconds, freq)),
+                 "voice_at": at}
+                for i, (colour, seconds, freq, at) in enumerate([("red", 1.5, 440, 0.3), ("blue", 1.2, 660, 0.5),
+                                                                  ("green", 1.0, 880, 0.3)])]
+    return build_reel(d, segments)
 
 
 def make_take(path: Path, filters: str = "", seconds: float = 10, size: str = "1920x1080") -> Path:
@@ -184,6 +225,98 @@ def test_audit_fails_on_a_reel_off_the_loudness_target(tmp_path):
     assert "LUFS" in problem and "-23" in problem
 
 
+@needs_ffmpeg
+@pytest.mark.parametrize("shift, passes", [(-0.3, False), (-0.2, True), (0.2, True), (0.3, False)])
+def test_audit_holds_a_shift_to_its_tolerance_in_both_directions(tmp_path, tone_reel, shift, passes):
+    """A voice file runs on past its sound (an mp3's last frame, a speech line's lead-in): the reel's sound is held
+    against each file's own first and last sound, so 0.25 s means 0.25 s early or late, at both ends."""
+    reel, _ = tone_reel
+    moved = with_sound_moved(reel, shift, tmp_path / "moved.mp4")
+    done = cli("audit", moved, "--plan", reel.with_suffix(".voice.json"), "--out", tmp_path / "audit.json")
+    report = json.loads((tmp_path / "audit.json").read_text())
+    assert (done.returncode == 0) is passes, report["problems"]
+    for v in report["voices"]:
+        start, (onset, end) = v["planned"][0], v["file_sound"]
+        assert onset < 0.05 and end < v["planned"][1] - start, "a tone sounds from its file's start to before its end"
+        assert v["expected"] == pytest.approx([start + onset, start + end], abs=1e-3)
+        assert v["start_off"] == pytest.approx(shift, abs=0.03) and v["end_off"] == pytest.approx(shift, abs=0.03)
+
+
+@needs_ffmpeg
+def test_audit_holds_a_voice_whose_file_is_gone_against_the_plan(tmp_path, tone_reel):
+    reel, _ = tone_reel
+    plan = json.loads(reel.with_suffix(".voice.json").read_text())
+    plan["voices"][1]["file"] = str(tmp_path / "gone.mp3")
+    (tmp_path / "plan.json").write_text(json.dumps(plan))
+    done = cli("audit", reel, "--plan", tmp_path / "plan.json", "--out", tmp_path / "audit.json")
+    assert done.returncode == 0, done.stderr
+    report = json.loads((tmp_path / "audit.json").read_text())
+    (warning,) = report["warnings"]
+    assert "voice 2" in warning and "gone.mp3" in warning and "plan" in warning
+    v = report["voices"][1]
+    assert v["file_sound"] is None and v["expected"] == v["planned"]
+
+
+@needs_ffmpeg
+def test_audit_names_a_video_and_audio_of_different_lengths(tmp_path, tone_reel):
+    reel, _ = tone_reel
+    longer = tmp_path / "longer.mp4"
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(reel), "-filter_complex", "[0:a]apad=pad_dur=0.3[a]",
+                    "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "96k", str(longer)], check=True)
+    done = cli("audit", longer, "--plan", reel.with_suffix(".voice.json"), "--out", tmp_path / "audit.json")
+    assert done.returncode == 1
+    (problem,) = json.loads((tmp_path / "audit.json").read_text())["problems"]
+    assert problem.startswith("the video is") and "more than 0.1 s" in problem
+
+
+@needs_ffmpeg
+def test_audit_passes_a_first_voice_at_the_reel_start(tmp_path):
+    a = make_clip(tmp_path / "a.mp4", 3)
+    reel, plan = build_reel(tmp_path, [{"file": str(a), "voice": str(make_tone(tmp_path / "one.mp3", 1.5)), "voice_at": 0}])
+    assert plan["voices"][0]["start"] == 0
+    done = cli("audit", reel, "--out", tmp_path / "audit.json")
+    assert done.returncode == 0, done.stderr
+    (v,) = json.loads((tmp_path / "audit.json").read_text())["voices"]
+    assert v["heard"][0] == pytest.approx(0, abs=0.03)
+
+
+@needs_ffmpeg
+def test_a_loudness_that_cannot_be_measured_is_said_so(tone_reel, monkeypatch):
+    reel, _ = tone_reel
+    monkeypatch.setattr(check_demo, "loudness", lambda *args, **kw: {"integrated": None, "true_peak": None, "range": None})
+    report = check_demo.audit(reel, reel.with_suffix(".voice.json"))
+    (problem,) = [p for p in report["problems"] if "loudness" in p]
+    assert "could not be measured" in problem and "None" not in problem
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("case", ["plan voice without end", "missing take", "take that is not a video", "script that is a list"])
+def test_wrongly_shaped_input_stops_with_one_line(tmp_path, tone_reel, case):
+    if case == "plan voice without end":
+        reel, _ = tone_reel
+        plan = json.loads(reel.with_suffix(".voice.json").read_text())
+        del plan["voices"][1]["end"]
+        (tmp_path / "plan.json").write_text(json.dumps(plan))
+        done = cli("audit", reel, "--plan", tmp_path / "plan.json", "--out", tmp_path / "audit.json")
+        (problem,) = json.loads((tmp_path / "audit.json").read_text())["problems"]
+        assert "voice 2" in problem and '"end"' in problem
+    else:
+        script, take = box_script(tmp_path), tmp_path / "take.webm"
+        if case == "take that is not a video":
+            take.write_text("not a video")
+        if case == "script that is a list":
+            script.write_text("[1, 2]")
+        done = cli("boxes", script, "--raw", take, "--out", tmp_path / "boxes.json")
+        assert len(done.stderr.strip().splitlines()) == 1, done.stderr
+        assert ("take.webm" if "take" in case else "a.json") in done.stderr
+    assert done.returncode == 1 and "Traceback" not in done.stderr
+
+
+def test_the_clip_steps_helpers_are_used_by_their_public_names():
+    assert not re.findall(r"edit_demo\._\w+", CHECK.read_text())
+    assert callable(edit_demo.stream_seconds) and callable(edit_demo.write_json_atomic)
+
+
 # ---------------------------------------------------------------- boxes
 
 BOX = [400, 300, 400, 200]
@@ -269,10 +402,18 @@ def test_sheet_writes_one_row_per_voice_in_one_html_file(tmp_path):
     assert page.count("<audio") == len(plan["voices"])
     sources = re.findall(r'\bsrc="([^"]*)"', page)
     assert sources and all(s.startswith("data:") for s in sources), "every picture and sound is inside the file"
-    assert not re.search(r"\bhref=|url\(|<link|<script|<iframe", page), "no reference to another file"
+    assert not re.search(r"url\(|<link|<script|<iframe|<object|<embed|srcset=|poster=", page), "no reference to another file"
+    links = re.findall(r'\bhref="([^"]*)"', page)
+    assert links and all(h.startswith("#") for h in links), "links stay inside the page"
+    assert {h[1:] for h in links} <= set(re.findall(r'\bid="([^"]+)"', page)), "every link has its target"
+    assert {"#r1", "#r2", "#r3"} <= set(links), "the index at the top links every row"
+    assert re.search(r'<a href="#r1"[^>]*>[^<]*1[^<]*</a>[^<]*crosses', page.split('<section id="r1"')[0]), \
+        "the list of flagged rows links the flagged row"
+    assert re.search(r'<section id="r1" class="[^"]*flagged', page) and '<section id="r2">' in page, "a flagged card stands out"
     assert '<meta charset="utf-8">' in page and "에이전트 게이트웨이에 정책 세 개가 걸려 있습니다." in page
     assert "기록 모드로 걸린 정책 세 줄" in page and "crosses" in page
     pictures = [s for s in sources if s.startswith("data:image/jpeg;base64,")]
     assert len(pictures) == 3 * 3 + 1, "three frames a row and one crop for the one box"
-    sound = next(s for s in sources if s.startswith("data:audio/"))
-    assert len(base64.b64decode(sound.split(",", 1)[1])) > 1000
+    sounds = [base64.b64decode(s.split(",", 1)[1]) for s in sources if s.startswith("data:audio/")]
+    for sound, freq in zip(sounds, [440, 550, 660], strict=True):
+        assert tone_frequency(sound, tmp_path) == pytest.approx(freq, rel=0.05), "each row plays its own voice"

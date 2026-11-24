@@ -479,10 +479,11 @@ def _number(value) -> float | None:
         return None
 
 
-def _stream_seconds(path: Path, kind: str, picture: bool = False) -> float | None:
+def stream_seconds(path: Path, kind: str, picture: bool = False) -> float | None:
     """Length of the first video ("v") or audio ("a") stream of a media file: the stream's own duration (an mp4's file
     length runs a few ms past its video, to the last audio packet), else the file's, else 0. None when ffprobe cannot
-    read the file or it has no such stream; a picture is decoded too (its reader goes by the file name alone)."""
+    read the file or it has no such stream; a picture is decoded too (its reader goes by the file name alone).
+    check_demo.py uses it too."""
     done = subprocess.run(["ffprobe", "-v", "error", "-select_streams", f"{kind}:0", *(["-count_frames"] if picture else []),
                            "-show_entries", "stream=duration,nb_read_frames:format=duration", "-of", "json", str(path)],
                           capture_output=True, text=True)
@@ -516,7 +517,7 @@ def _narrated_segments(cfg: dict) -> tuple[list[dict], tuple[int, int]]:
         if not src.is_file():
             problems.append(f"{label}: file not found: {src}")
             continue
-        length = _stream_seconds(src, "v", picture=is_image)
+        length = stream_seconds(src, "v", picture=is_image)
         if length is None:
             problems.append(f"{label}: cannot read {src} as {'a picture' if is_image else 'a video'}")
             continue
@@ -558,7 +559,7 @@ def _narrated_segments(cfg: dict) -> tuple[list[dict], tuple[int, int]]:
             if not voice.is_file():
                 problems.append(f"{label}: voice file not found: {voice}")
                 continue
-            voice_seconds = _stream_seconds(voice, "a")
+            voice_seconds = stream_seconds(voice, "a")
             if voice_seconds is None:
                 problems.append(f"{label}: cannot read the voice file {voice} as audio")
                 continue
@@ -717,7 +718,7 @@ def build_narrated_reel(spec: Path, out: Path) -> None:
     warnings += [note] if note else []
     r4 = lambda t: round(t, 4)  # noqa: E731
     plan_path = out.with_suffix(".voice.json")
-    _write_json_atomic(plan_path, {
+    write_json_atomic(plan_path, {
         "segments": [{"name": s["name"], "start": r4(starts[i]), "seconds": r4(lengths[i]), "hold": r4(holds[i])}
                      for i, s in enumerate(segs)],
         "voices": [{**v, "start": r4(v["start"]), "end": r4(v["end"])} for v in voices],
@@ -747,7 +748,7 @@ def unreadable(text: str) -> list[str]:
     return re.findall(r"[A-Za-z]+|[0-9]+", text)
 
 
-def _write_json_atomic(path: Path, data: dict) -> None:
+def write_json_atomic(path: Path, data: dict) -> None:
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     os.replace(tmp, path)
@@ -823,15 +824,15 @@ def synthesize(lines: dict, out: Path, *, voice: str, engine: str, language: str
         if done.returncode != 0:
             target.unlink(missing_ok=True)
             entries.pop(name, None)
-            _write_json_atomic(index, entries)
+            write_json_atomic(index, entries)
             raise SystemExit(f"voice: {name}: aws polly synthesize-speech failed ({done.returncode}): "
                              f"{(done.stderr or done.stdout).strip()}")
         if not target.is_file():
             raise SystemExit(f"voice: {name}: aws polly synthesize-speech exited 0 but wrote no audio file")
         entries[name] = {"file": target.name, "seconds": round(probe_duration(target), 2), "spoken": text, "key": key}
-        _write_json_atomic(index, entries)
+        write_json_atomic(index, entries)
     result = {n: entries[n] for n in lines}
-    _write_json_atomic(index, result)
+    write_json_atomic(index, result)
     return result
 
 

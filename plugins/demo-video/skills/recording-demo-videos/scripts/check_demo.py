@@ -6,11 +6,14 @@
   python3 check_demo.py sheet reel.mp4 --plan reel.voice.json --texts texts.json [--boxes boxes/*.json] --out review/
 
 audit  The reel's own sound against its plan (<reel stem>.voice.json, written by `edit_demo.py reel`). Speech is found
-       with ffmpeg's silencedetect (-35 dB; 0.35 s of silence parts two voices). Problems, one line each: a voice heard
-       more than --tolerance s from its planned start or end, a planned voice with no sound, sound where no voice is
-       planned, two voices planned closer than 0.35 s (their sound cannot be told apart), video and audio lengths more
-       than 0.1 s apart, an integrated loudness (ffmpeg's ebur128 meter) more than 1.5 LU from --loudness. The report is
-       written either way; exit 1 when it holds a problem.
+       with ffmpeg's silencedetect (-35 dB; 0.35 s of silence parts two voices), in the reel and in each voice file:
+       a voice's sound is expected from its planned start + its file's first sound to its planned start + its file's
+       last sound (a file runs on past its sound; the plan's times are used, with a warning, when the file is gone).
+       Problems, one line each: a voice heard more than --tolerance s early or late at either end, a planned voice with
+       no sound, sound where no voice is planned, two voices planned to sound closer than 0.35 s (they cannot be told
+       apart), video and audio lengths more than 0.1 s apart, an integrated loudness (ffmpeg's ebur128 meter) more than
+       1.5 LU from --loudness or none measured, a plan whose voices lack "name", "start" or "end". The report is written
+       either way; exit 1 when it holds a problem.
 boxes  Each highlight box of a clip script, measured on the raw take, never on the clip (which holds the box and the
        caption): the take's frames at the box's first and last moment, scaled to 1920x1080 as the clip step scales them.
        std: the largest luminance standard deviation (0-255) along the four strips where the border is drawn; redness:
@@ -23,7 +26,8 @@ sheet  One row per voice of the plan: the finished reel's frames at the voice's 
        caption, the narration, what each box points at, the flags and the times. texts.json: {"<voice name>":
        {"caption": "...", "say": "...", "what": ["..."], "sources": ["..."]}}, every field optional. Writes
        <out>/index.json, one JPEG per row and <out>/review.html: one file with every picture and each voice's sound
-       inside it, to send as it is.
+       inside it, to send as it is. Its top lists every row and the flagged rows as links to the rows (in-page links
+       only); a flagged row's card has a red edge.
 Exit codes: 0 done (audit: passed), 1 a problem or input that cannot be read (a box the clip step would refuse stops
 `boxes` with that step's message), 2 a usage error.
 """
@@ -50,7 +54,7 @@ from edit_demo import FPS, H, HIGHLIGHT, HIGHLIGHT_THICK, W  # noqa: E402
 SPEECH_NOISE_DB = -35.0      # silencedetect: quieter than this is silence
 SPEECH_MIN_SILENCE = 0.35    # s; a shorter pause stays inside one voice
 MIN_SOUND = 0.05             # s; a shorter burst is left out (rounding at the file's edges, a click)
-EDGE_SILENCE = 0.02          # s; at the file's two ends any silence this long counts (no voice there to merge with)
+EDGE_PAD = 1.0               # s of silence put before and after the decoded sound, so its two ends are found too
 VOICE_TOLERANCE = 0.25       # s a voice may start or end away from its plan
 LENGTH_TOLERANCE = 0.1       # s between the video's and the audio's length
 LOUDNESS_TOLERANCE = 1.5     # LU around the target (edit_demo.VOICE_LOUDNESS, -16 LUFS)
@@ -79,52 +83,40 @@ def _read_json(path: Path, what: str):
 
 def _write_json(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    edit_demo._write_json_atomic(path, data)
+    edit_demo.write_json_atomic(path, data)
 
 
 # ---------------------------------------------------------------- audit: speech, lengths, loudness
 
-def _silences(path: Path, noise_db: float, min_silence: float, start: float = 0.0,
-              seconds: float | None = None) -> list[tuple[float, float]]:
-    """Silences of at least `min_silence` s (ffmpeg silencedetect on the first audio stream) in the file, or in
-    `seconds` s of it from `start`, as (start, end) file seconds; one that the end of what is read closes ends there."""
-    window = (["-ss", f"{start:.3f}"] if start else []) + ([] if seconds is None else ["-t", f"{seconds:.3f}"])
-    done = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", *window, "-i", str(path), "-map", "0:a:0",
-                           "-af", f"silencedetect=n={noise_db:g}dB:d={min_silence:g}", "-f", "null", "-"],
+def speech_intervals(path: Path, noise_db: float = SPEECH_NOISE_DB,
+                     min_silence: float = SPEECH_MIN_SILENCE) -> list[tuple[float, float]]:
+    """Where a file's sound is louder than `noise_db`, as (start, end) seconds: what lies between silences of at least
+    `min_silence` s (ffmpeg silencedetect on the first audio stream). EDGE_PAD s of silence is put before and after the
+    decoded sound, so a silence at either end of the file counts however short (a first voice 0.3 s into a reel starts
+    at 0.3), and the sound ends where it stops, not at the file's stated length (an mp3 states more than it decodes).
+    Bursts under MIN_SOUND s are left out."""
+    if edit_demo.stream_seconds(path, "a") is None:
+        raise SystemExit(f"cannot read an audio stream in {path}")
+    pad = f"adelay=delays={EDGE_PAD * 1000:g}:all=1,apad=pad_dur={EDGE_PAD:g}"
+    done = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", str(path), "-map", "0:a:0",
+                           "-af", f"{pad},silencedetect=n={noise_db:g}dB:d={min_silence:g}", "-f", "null", "-"],
                           capture_output=True, text=True)
     if done.returncode != 0:
         raise SystemExit(f"cannot read the sound of {path}: {_last_line(done.stderr)}")
     silences, opened = [], None
     for kind, value in re.findall(r"silence_(start|end): (-?[\d.]+)", done.stderr):
         if kind == "start":
-            opened = max(0.0, float(value))
+            opened = float(value) - EDGE_PAD
         else:
-            silences.append((start + (0.0 if opened is None else opened), start + float(value)))
+            silences.append((-EDGE_PAD if opened is None else opened, float(value) - EDGE_PAD))
             opened = None
-    if opened is not None:   # ffmpeg 4.4 closes a silence at the end of what it reads; an open one runs to there
-        silences.append((start + opened, math.inf))
-    return silences
-
-
-def speech_intervals(path: Path, noise_db: float = SPEECH_NOISE_DB,
-                     min_silence: float = SPEECH_MIN_SILENCE) -> list[tuple[float, float]]:
-    """Where a file's sound is louder than `noise_db`, as (start, end) seconds: what lies between silences of at least
-    `min_silence` s (ffmpeg silencedetect on the first audio stream). At the file's two ends a silence of
-    EDGE_SILENCE s counts, so a first voice 0.3 s into a reel starts at 0.3, not 0. Bursts under MIN_SOUND s are left out."""
-    length = edit_demo._stream_seconds(path, "a")
-    if length is None:
-        raise SystemExit(f"cannot read an audio stream in {path}")
-    silences = _silences(path, noise_db, min_silence)
-    edge = min(min_silence, length)
-    if not silences or silences[0][0] > 0.001:          # no long silence at the start: look for a short one
-        silences = [s for s in _silences(path, noise_db, EDGE_SILENCE, seconds=edge)[:1] if s[0] <= 0.001] + silences
-    if not silences or silences[-1][1] < length - 0.03:  # nor at the end (4.4 closes a silence at the file's end)
-        silences += [s for s in _silences(path, noise_db, EDGE_SILENCE, start=length - edge)[-1:] if s[1] >= length - 0.03]
+    if opened is not None:   # ffmpeg 4.4 closes the last silence at the end of what it reads; an open one runs on
+        silences.append((opened, math.inf))
     sound, at = [], 0.0
-    for a, b in sorted(silences) + [(length, length)]:
-        if min(a, length) - at >= MIN_SOUND:
-            sound.append((round(at, 3), round(min(a, length), 3)))
-        at = max(at, min(b, length))
+    for a, b in silences:
+        if a - at >= MIN_SOUND:
+            sound.append((round(at, 3), round(a, 3)))
+        at = max(at, b)
     return sound
 
 
@@ -149,38 +141,65 @@ def _heard(planned: list[dict], detected: list[tuple[float, float]], tolerance: 
 
 
 def voice_problems(planned: list[dict], detected: list[tuple[float, float]], tolerance: float = VOICE_TOLERANCE) -> list[str]:
-    """One line per voice heard more than `tolerance` s from its planned start or end, per planned voice with no
-    sound, and per sound where no voice is planned. `planned`: the plan's voices ("name", "start", "end"), in order."""
+    """One line per voice heard more than `tolerance` s early or late at the start or the end of its sound, per voice
+    with no sound, and per sound where no voice is planned. `planned`: the voices in order, each with "name" and the
+    "start" and "end" of its sound in the reel. `audit` gives each voice's planned start plus its own file's first and
+    last sound, with "placed" (the planned start) and "own" (the file's sound) for the line; plain plan times work too."""
     spans, extra = _heard(planned, detected, tolerance)
     problems = []
     for k, (v, s) in enumerate(zip(planned, spans), 1):
-        planned_at = f"planned {v['start']:.2f}-{v['end']:.2f} s"
+        expected = f"sound expected at {v['start']:.2f}-{v['end']:.2f} s"
+        if "own" in v:
+            expected += f" (its file placed at {v['placed']:.2f} s sounds {v['own'][0]:.2f}-{v['own'][1]:.2f} s into it)"
         if s is None:
-            problems.append(f"{_label(k, v)}: {planned_at}, no sound there")
+            problems.append(f"{_label(k, v)}: {expected}, no sound there")
         elif abs(s[0] - v["start"]) > tolerance or abs(s[1] - v["end"]) > tolerance:
-            problems.append(f"{_label(k, v)}: {planned_at}, heard {s[0]:.2f}-{s[1]:.2f} s (start {s[0] - v['start']:+.2f} s, "
+            problems.append(f"{_label(k, v)}: {expected}, heard {s[0]:.2f}-{s[1]:.2f} s (start {s[0] - v['start']:+.2f} s, "
                             f"end {s[1] - v['end']:+.2f} s; more than {tolerance:g} s off)")
     return problems + [f"sound at {a:.2f}-{b:.2f} s where no voice is planned" for a, b in extra]
 
 
 def close_voices(planned: list[dict], min_silence: float = SPEECH_MIN_SILENCE) -> tuple[list[dict], list[str]]:
-    """The plan's voices as silence detection can tell them apart. Two voices planned less than `min_silence` s apart
-    sound as one interval: they are joined into one span, checked as one, and said in a problem line (rather than
-    reported as a shifted end and a shifted start)."""
+    """The voices as silence detection can tell them apart. Two voices whose sounds are planned less than
+    `min_silence` s apart sound as one interval: they are joined into one span, checked as one, and said in a problem
+    line (rather than reported as a shifted end and a shifted start)."""
     groups, problems = [], []
     for k, v in enumerate(planned, 1):
         if groups and v["start"] - planned[k - 2]["end"] < min_silence:
-            problems.append(f"{_label(k - 1, planned[k - 2])} and {_label(k, v)} are planned "
+            problems.append(f"{_label(k - 1, planned[k - 2])} and {_label(k, v)} are planned to sound "
                             f"{v['start'] - planned[k - 2]['end']:.2f} s apart, less than the {min_silence:g} s of silence "
                             f"that parts two voices: their sound is checked as one")
             g = groups[-1]
+            for key in ("own", "placed"):   # the line of a joined span names no single file
+                g.pop(key, None)
             g["voices"].append(k)
             g["end"] = max(g["end"], v["end"])
             g["label"] = (f"voices {', '.join(map(str, g['voices']))} "
                           f"({', '.join(planned[j - 1]['name'] for j in g['voices'])})")
         else:
-            groups.append({"name": v["name"], "start": v["start"], "end": v["end"], "voices": [k], "label": _label(k, v)})
+            groups.append({**v, "voices": [k], "label": _label(k, v)})
     return groups, problems
+
+
+def _own_sound(path: Path) -> tuple[float, float] | None:
+    """Where a voice file's own sound begins and ends, seconds into the file (the same detection as in the reel);
+    None when the file cannot be read or holds no sound."""
+    try:
+        found = speech_intervals(path)
+    except SystemExit:
+        return None
+    return (found[0][0], found[-1][1]) if found else None
+
+
+def _plan_voice_problem(k: int, v) -> str | None:
+    if not isinstance(v, dict):
+        return f"voice {k} is not an object"
+    missing = [key for key in ("name", "start", "end") if key not in v]
+    if missing:
+        return f"voice {k} has no " + ", ".join(f'"{key}"' for key in missing)
+    if not all(isinstance(v[key], (int, float)) and not isinstance(v[key], bool) for key in ("start", "end")):
+        return f'voice {k}: "start" and "end" must be numbers of seconds'
+    return None
 
 
 def loudness(path: Path, start: float | None = None, seconds: float | None = None) -> dict:
@@ -208,15 +227,32 @@ def audit(reel: Path, plan_path: Path, *, tolerance: float = VOICE_TOLERANCE,
     voices = plan.get("voices") if isinstance(plan, dict) else None
     if not isinstance(voices, list):
         raise SystemExit(f"the plan {plan_path} has no list of voices")
-    video, audio = edit_demo._stream_seconds(reel, "v"), edit_demo._stream_seconds(reel, "a")
+    if shape := [p for k, v in enumerate(voices, 1) if (p := _plan_voice_problem(k, v))]:
+        raise SystemExit(f"the plan {plan_path} does not describe its voices: " + "; ".join(shape))
+    video, audio = edit_demo.stream_seconds(reel, "v"), edit_demo.stream_seconds(reel, "a")
     if video is None or audio is None:
         raise SystemExit(f"cannot read {'a video' if video is None else 'an audio'} stream in {reel}")
     report["length"] = {"video": video, "audio": audio, "limit": LENGTH_TOLERANCE}
     if abs(video - audio) > LENGTH_TOLERANCE:
         problems.append(f"the video is {video:.3f} s and the audio {audio:.3f} s long, {abs(video - audio):.3f} s apart "
                         f"(more than {LENGTH_TOLERANCE:g} s)")
+    # a voice file runs on past its sound (an mp3's last frame) and a speech line begins after its file does: the
+    # reel's sound is held against each file's own first and last sound, so the tolerance holds both ways
+    own: dict[str, tuple[float, float] | None] = {}
+    expected = []
+    for k, v in enumerate(voices, 1):
+        file = str(v.get("file") or "")
+        if file not in own:
+            own[file] = _own_sound(Path(file)) if file else None
+        if (sound := own[file]) is None:
+            report["warnings"].append(f"{_label(k, v)}: found no sound in its file {file or '(none named)'} (missing, "
+                                      f"unreadable or silent): held against the plan's times")
+            expected.append({"name": v["name"], "start": v["start"], "end": v["end"]})
+        else:
+            expected.append({"name": v["name"], "start": round(v["start"] + sound[0], 4), "end": round(v["start"] + sound[1], 4),
+                             "placed": v["start"], "own": sound})
     detected = speech_intervals(reel)
-    groups, close = close_voices(voices)
+    groups, close = close_voices(expected)
     problems += close + voice_problems(groups, detected, tolerance)
     report["speech"] = {"filter": f"silencedetect=n={SPEECH_NOISE_DB:g}dB:d={SPEECH_MIN_SILENCE:g}", "tolerance": tolerance,
                         "intervals": [list(i) for i in detected]}
@@ -224,13 +260,14 @@ def audit(reel: Path, plan_path: Path, *, tolerance: float = VOICE_TOLERANCE,
     report["voices"] = []
     for g, s in zip(groups, spans):
         for k in g["voices"]:
-            v = voices[k - 1]
-            entry = {"voice": k, "segment": v.get("segment"), "name": v["name"], "planned": [v["start"], v["end"]],
-                     "heard": None if s is None else list(s)}
+            v, e = voices[k - 1], expected[k - 1]
+            entry = {"voice": k, "segment": v.get("segment"), "name": v["name"], "file": v.get("file"),
+                     "planned": [v["start"], v["end"]], "file_sound": list(e["own"]) if "own" in e else None,
+                     "expected": [e["start"], e["end"]], "heard": None if s is None else list(s)}
             if len(g["voices"]) > 1:
                 entry["checked_with"] = [j for j in g["voices"] if j != k]
             elif s is not None:
-                entry.update(start_off=round(s[0] - v["start"], 3), end_off=round(s[1] - v["end"], 3))
+                entry.update(start_off=round(s[0] - e["start"], 3), end_off=round(s[1] - e["end"], 3))
             entry["loudness"] = loudness(reel, v["start"], v["end"] - v["start"])["integrated"]
             report["voices"].append(entry)
     level = loudness(reel)
@@ -241,8 +278,11 @@ def audit(reel: Path, plan_path: Path, *, tolerance: float = VOICE_TOLERANCE,
         report["loudness"]["voices"] = {"lowest": min(levels), "highest": max(levels), "spread": round(max(levels) - min(levels), 1)}
     if not voices:
         report["warnings"].append("the plan has no voices: the loudness is not checked")
-    elif level["integrated"] is None or abs(level["integrated"] - target) > LOUDNESS_TOLERANCE:
-        problems.append(f"the integrated loudness is {level['integrated']} LUFS, more than {LOUDNESS_TOLERANCE:g} LU "
+    elif level["integrated"] is None:
+        problems.append(f"the integrated loudness could not be measured (ffmpeg ebur128 gave no value); the target is "
+                        f"{target:g} LUFS")
+    elif abs(level["integrated"] - target) > LOUDNESS_TOLERANCE:
+        problems.append(f"the integrated loudness is {level['integrated']:.1f} LUFS, more than {LOUDNESS_TOLERANCE:g} LU "
                         f"from the target of {target:g} LUFS")
     if level["true_peak"] is not None and level["true_peak"] > edit_demo.VOICE_TRUE_PEAK:
         report["warnings"].append(f"the true peak is {level['true_peak']:.1f} dBTP, above {edit_demo.VOICE_TRUE_PEAK:g} dBTP")
@@ -313,12 +353,16 @@ def measure_boxes(script: Path, raw: Path) -> dict:
     """The `boxes` report of one clip script: per box its rectangle (frame px), its time (raw and clip seconds), what
     lies under its border and the flags. Both frames are read from the raw take; the clip is never opened."""
     story = _read_json(script, "the clip script")
+    beats = (story.get("beats") or []) if isinstance(story, dict) else None
+    if not isinstance(beats, list) or not all(isinstance(b, dict) and "at" in b for b in beats):
+        raise SystemExit(f"{script} is not a clip script (one JSON object whose \"beats\" each have an \"at\")")
+    take_end = edit_demo.stream_seconds(raw, "v")
+    if not take_end:
+        raise SystemExit(f"cannot read the take {raw} as a video")
     log = edit_demo.read_camlog(raw)
     start, end = edit_demo.clip_span(raw, log, story.get("start"), story.get("end"))
     speed = float(story.get("speed", edit_demo.DEFAULT_SPEED))
-    beats = story.get("beats") or []
     layout = edit_demo.beat_layout(beats, log, start=start, end=end, speed=speed, title=story.get("title"))
-    take_end = edit_demo.probe_duration(raw)
     found = []
     for item in layout:
         if not item["box_raw"]:
@@ -351,9 +395,15 @@ body{margin:0;padding:16px;background:var(--bg);color:var(--ink);
 main{max-width:2000px;margin:0 auto}
 h1{font-size:22px;margin:0 0 4px}
 section{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 16px;margin:16px 0}
+section.flagged{border:2px solid var(--flag);border-left-width:8px}
 h2{font-size:18px;margin:0}
+a{color:inherit}
+h2 a.back{font-size:13px;font-weight:400;color:var(--dim);margin-left:8px}
 .dim{color:var(--dim);font-size:14px;margin:2px 0 8px}
 .flags{color:var(--flag);font-weight:600}
+.index{display:flex;flex-wrap:wrap;gap:2px 14px;list-style:none;padding:0;margin:8px 0;font-size:14px}
+.index a{text-decoration:none;border-bottom:1px solid var(--line)}
+.index a.flagged{color:var(--flag);font-weight:600}
 .frames{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px;max-width:1940px}
 .frames img{width:100%}
 .crops{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
@@ -488,7 +538,8 @@ def _row_section(row: dict, frames: list[bytes], crops: list[bytes], sound: tupl
                     for box in row["boxes"])
     unmeasured = row["what"][len(row["boxes"]):]
     boxes += "".join(f'<li>{e(w)} <span class="dim">(no box measured)</span></li>' for w in unmeasured)
-    parts = [f'<section id="r{row["row"]}"><h2>#{row["row"]} {e(row["name"])}</h2>',
+    parts = [f'<section id="r{row["row"]}"' + (' class="flagged"' if row["flags"] else "") + '>'
+             f'<h2>#{row["row"]} {e(row["name"])} <a class="back" href="#top">index</a></h2>',
              f'<p class="dim">{e(times)}</p>',
              f'<p class="flags">{e(", ".join(row["flags"]))}</p>' if row["flags"] else "",
              f'<audio controls preload="none" src="{_data_uri(*sound)}"></audio>',
@@ -516,7 +567,7 @@ def build_sheet(reel: Path, plan_path: Path, texts_path: Path, boxes_paths: list
         if not isinstance(report, dict) or "name" not in report or not isinstance(report.get("boxes"), list):
             raise SystemExit(f"{path} is not a report of `check_demo.py boxes` (no name or no list of boxes)")
         boxes_by_name.setdefault(report["name"], []).extend(report["boxes"])
-    length = edit_demo._stream_seconds(reel, "v")
+    length = edit_demo.stream_seconds(reel, "v")
     if not length:
         raise SystemExit(f"cannot read a video stream in {reel}")
     scale = int(edit_demo.probe_size(reel).split("x")[0]) / W
@@ -545,15 +596,20 @@ def build_sheet(reel: Path, plan_path: Path, texts_path: Path, boxes_paths: list
                                      _voice_sound(reel, v["start"], v["end"])))
         rows.append(row)
         print(f"sheet: row {k} ({v['name']})", file=sys.stderr)
-    flagged = [f"{r['row']} ({', '.join(r['flags'])})" for r in rows if r["flags"]]
     e = lambda s: html.escape(str(s), quote=True)  # noqa: E731
-    head = [f'<h1>{e(reel.name)}</h1>',
+    # links stay inside the page (href="#rN"): the page refers to no other file
+    flagged = "; ".join(f'<a href="#r{r["row"]}">{r["row"]}</a> ({e(", ".join(r["flags"]))})' for r in rows if r["flags"])
+    every_row = "".join(f'<li><a href="#r{r["row"]}"' + (' class="flagged"' if r["flags"] else "") + f'>{r["row"]} {e(r["name"])}</a>'
+                        + (f' <span class="flags">{e(", ".join(r["flags"]))}</span>' if r["flags"] else "") + "</li>" for r in rows)
+    head = ['<nav id="top">', f'<h1>{e(reel.name)}</h1>',
             f'<p class="dim">{len(rows)} narrations · reel {length:.1f} s · plan {e(plan_path.name)}. '
             f'Each row: frames at the voice\'s start + 0.5 s, middle and end - 0.2 s, its sound, the texts and the boxes. '
             f'Name a row by its number to have it changed.</p>',
-            f'<p class="flags">Rows with flags: {e("; ".join(flagged))}</p>' if flagged else '<p class="dim">No flags.</p>']
+            f'<p class="flags">Rows with flags: {flagged}</p>' if flagged else '<p class="dim">No flags.</p>',
+            f'<ol class="index">{every_row}</ol>' if rows else ""]
     if plan.get("warnings"):
         head.append("<ul>" + "".join(f'<li class="dim">{e(w)}</li>' for w in plan["warnings"]) + "</ul>")
+    head.append("</nav>")
     page = out / "review.html"
     page.write_text('<!doctype html>\n<html lang="ko">\n<head>\n<meta charset="utf-8">\n'
                     '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
