@@ -37,6 +37,11 @@ Script JSON:
      {"at": 41.0, "text": "…", "dur": 5.5},         # raw seconds; dur = end the caption before the next action
      {"at": "shot:table", "text": "…", "pos": "top"}  # caption at the top when the lower third hides the evidence
    ]}
+  Highlight boxes (1.4.0): a beat may add "box": [x, y, w, h] | [[x, y, w, h], ...] | "shot:<key>[#n]" | "mark:<key>[#n]"
+  (frame pixels; the last two use the camlog entry's rect, grown by the border + 4 px). A red border (8 px, a dark line
+  outside it) shows from the caption's start + "box_delay" (default 1.4 / speed + 0.2 s on a "shot:" anchor, else 0) to its end.
+  "hold": true on the LAST beat keeps its caption and boxes to the clip's last frame with no fade-out. A box under the
+  caption, outside the frame, or with a camera move (a camlog shot) while it shows stops the clip before ffmpeg starts.
   Beat duration defaults to the gap to the next beat (max 7 s, min 1.5 s). `#n` counts occurrences of that
   same key / substring / kind only. Raw seconds are seconds from launch and are not validated against the
   camlog. A context fact with no event of its own (a batch statistic, a caveat) belongs on a late summary
@@ -73,6 +78,13 @@ DEFAULT_SPEED = 1.25  # a demo at real time drags; 1.25x reads as a confident pa
 # caption box: blue, so it stays visible on dark UIs (the old near-black box vanished on dark pages and terminals)
 BEAT_BOX = os.environ.get("DEMO_BEAT_BOX", "0x1f6feb@0.82")
 BEAT_SIZE = 34
+BEAT_BORDER = 18
+BEAT_Y_BOTTOM, BEAT_Y_TOP = H - 150, 120   # caption y (the drawtext y expressions "h-150" and "120")
+# highlight boxes (1.4.0): a red border with a thin dark line just outside it, so the box shows on red or orange UIs too
+HIGHLIGHT = os.environ.get("DEMO_HIGHLIGHT", "0xff2a2a@0.95")
+HIGHLIGHT_THICK = int(os.environ.get("DEMO_HIGHLIGHT_THICK", "8"))
+HIGHLIGHT_OUTLINE = 2
+CAMERA_MOVE = 1.4  # seconds the recorder's camera takes to arrive on a shot (raw time)
 
 
 def run(cmd: list[str]) -> None:
@@ -88,17 +100,17 @@ def probe_duration(path: Path) -> float:
 
 def drawtext(textfile: Path, *, font: str, size: int, x: str, y: str, start: float, end: float,
              color: str = "white", box: bool = True, alpha_fade: bool = True,
-             boxcolor: str = BEAT_BOX) -> str:
+             boxcolor: str = BEAT_BOX, fade_out: bool = True) -> str:
     enable = f"between(t\\,{start:.2f}\\,{end:.2f})"
     # expansion=none: the text is literal (a '%' would otherwise start a drawtext expansion sequence)
     parts = [f"drawtext=fontfile={font}", f"textfile={textfile}", "expansion=none", f"fontsize={size}", f"fontcolor={color}",
              f"x={x}", f"y={y}", f"enable='{enable}'"]
     if box:
-        parts += ["box=1", f"boxcolor={boxcolor}", "boxborderw=18"]
+        parts += ["box=1", f"boxcolor={boxcolor}", f"boxborderw={BEAT_BORDER}"]
     if alpha_fade:
-        # fade in/out over 0.35 s inside the enable window
-        fade = (f"if(lt(t-{start:.2f}\\,0.35)\\,(t-{start:.2f})/0.35\\,"
-                f"if(lt({end:.2f}-t\\,0.35)\\,({end:.2f}-t)/0.35\\,1))")
+        # fade in/out over 0.35 s inside the enable window (fade_out=False: a held caption stays to the last frame)
+        tail = f"if(lt({end:.2f}-t\\,0.35)\\,({end:.2f}-t)/0.35\\,1)" if fade_out else "1"
+        fade = f"if(lt(t-{start:.2f}\\,0.35)\\,(t-{start:.2f})/0.35\\,{tail})"
         parts.append(f"alpha='{fade}'")
     return ":".join(parts)
 
@@ -122,6 +134,67 @@ def script_time(at, log: list[dict]) -> float:
     if len(hits) < n:
         raise SystemExit(f"script anchor not found in camlog: {at!r}")
     return float(hits[n - 1]["t"])
+
+
+def _bad_box(box, why: str):
+    raise SystemExit(f"box {box!r}: {why}")
+
+
+def _frame_rect(box, grow: int = 0) -> tuple[int, int, int, int]:
+    """A rectangle [x, y, w, h] grown by `grow` px on each side and clipped to the frame; aborts when nothing is left."""
+    try:
+        x, y, w, h = (int(round(float(v))) for v in box)
+    except (TypeError, ValueError):
+        _bad_box(box, "needs four numbers [x, y, w, h]")
+    x0, y0, x1, y1 = x - grow, y - grow, x + w + grow, y + h + grow
+    if grow:
+        x0, y0, x1, y1 = max(0, x0), max(0, y0), min(W, x1), min(H, y1)
+    if w <= 0 or h <= 0 or x0 < 0 or y0 < 0 or x1 > W or y1 > H or x1 <= x0 or y1 <= y0:
+        _bad_box(box, f"has no size or lies outside the {W}x{H} frame")
+    return x0, y0, x1 - x0, y1 - y0
+
+
+def beat_boxes(beat: dict, log: list[dict]) -> list[tuple[int, int, int, int]]:
+    """The rectangles a beat's "box" asks for, as they will be drawn. Numbers are drawn as given; a camlog rect
+    ("shot:<key>[#n]" / "mark:<key>[#n]") is the element's own bounds, so it is grown by the border + 4 px."""
+    box = beat.get("box")
+    if box is None or box == []:
+        return []
+    if isinstance(box, str):
+        spec, _, nth = box.partition("#")
+        kind, _, key = spec.partition(":")
+        n = int(nth) if nth else 1
+        hits = [e for e in log if e["kind"] == kind and e.get("key") == key] if kind in ("shot", "mark") else []
+        if len(hits) < n or not hits[n - 1].get("rect"):
+            _bad_box(box, "has no rect in the camlog (use 'shot:<key>' or 'mark:<key>' of an element the recorder measured)")
+        return [_frame_rect(hits[n - 1]["rect"], grow=HIGHLIGHT_THICK + 4)]
+    rects = box if isinstance(box[0], (list, tuple)) else [box]
+    return [_frame_rect(r) for r in rects]
+
+
+def box_delay(beat: dict, speed: float) -> float:
+    """Seconds after the caption starts that its box appears: the camera needs CAMERA_MOVE (raw) to arrive on a shot."""
+    if "box_delay" in beat:
+        return float(beat["box_delay"])
+    return CAMERA_MOVE / speed + 0.2 if str(beat.get("at", "")).startswith("shot:") else 0.0
+
+
+def caption_band(pos: str | None) -> tuple[int, int]:
+    """Top and bottom y of the beat caption's box ("top" or the lower third), one line of text."""
+    y = BEAT_Y_TOP if pos == "top" else BEAT_Y_BOTTOM
+    return y - BEAT_BORDER, y + round(BEAT_SIZE * 1.3) + BEAT_BORDER
+
+
+def drawbox(rect, *, start: float, end: float) -> list[str]:
+    """ffmpeg filters for one highlight box: the dark outline just outside the red border, then the border
+    (drawbox draws inside the rectangle it is given)."""
+    enable = f"enable='between(t\\,{start:.2f}\\,{end:.2f})'"
+    x, y, w, h = rect
+    o = HIGHLIGHT_OUTLINE
+    ox, oy = max(0, x - o), max(0, y - o)
+    ow, oh = min(W, x + w + o) - ox, min(H, y + h + o) - oy
+    return [f"drawbox=x={ox}:y={oy}:w={ow}:h={oh}:color=0x101010@0.9:t={o}:{enable}",
+            f"drawbox=x={x}:y={y}:w={w}:h={h}:color={HIGHLIGHT}:t={HIGHLIGHT_THICK}:{enable}"]
 
 
 def build_clip(raw: Path, out: Path, title: str | None, subtitle: str | None, start: float | None,
@@ -170,11 +243,16 @@ def _encode_clip(raw: Path, out: Path, title, subtitle, tag, start: float, end: 
             t_raw = script_time(b["at"], log) + float(b.get("offset", 0))
             beats.append((rel(t_raw), b))
         beats.sort(key=lambda x: x[0])
+        boxes = [beat_boxes(b, log) for _, b in beats]  # checked before ffmpeg starts
+        for i, (_, b) in enumerate(beats[:-1]):
+            if b.get("hold"):
+                raise SystemExit(f"hold on beat {b['text']!r} is not allowed: only the clip's last beat can be held")
         for i, (t0, b) in enumerate(beats):
             t0 = max(t0, 4.4 if title else 0.2 if speed == 1 else 0.0)  # never under the title card
             nxt = beats[i + 1][0] if i + 1 < len(beats) else rel(end)
             dur = float(b.get("dur", min(7.0, nxt - t0 - 0.3)))
-            t1 = min(t0 + max(dur, 1.5), rel(end) - 0.1)
+            hold = bool(b.get("hold"))
+            t1 = rel(end) if hold else min(t0 + max(dur, 1.5), rel(end) - 0.1)
             if t1 - t0 < 1.0:
                 print(f"skip beat (no room): {b['text']!r}", file=sys.stderr)
                 continue
@@ -182,8 +260,26 @@ def _encode_clip(raw: Path, out: Path, title, subtitle, tag, start: float, end: 
             f.write_text(b["text"])
             y = "120" if b.get("pos") == "top" else "h-150"  # pos=top when the lower third would cover the evidence
             # one look for every beat ("style": "insight" is accepted for old scripts and renders the same)
-            filters.append(drawtext(f, font=FONT_BOLD, size=BEAT_SIZE, x="96", y=y, start=t0, end=t1, color="0xffffff"))
+            filters.append(drawtext(f, font=FONT_BOLD, size=BEAT_SIZE, x="96", y=y, start=t0, end=t1, color="0xffffff",
+                                    fade_out=not hold))
             placed += 1
+            if boxes[i]:
+                b0 = t0 + box_delay(b, speed)
+                if b0 >= t1:
+                    print(f"skip box (its delay outlasts the caption): {b['text']!r}", file=sys.stderr)
+                    continue
+                band = caption_band(b.get("pos"))
+                for r in boxes[i]:
+                    if r[1] < band[1] and r[1] + r[3] > band[0]:
+                        raise SystemExit(f"box {list(r)} crosses the caption band y {band[0]}-{band[1]} (pos={b.get('pos') or 'bottom'}): "
+                                         f"move the box or set \"pos\" to the other edge")
+                lo, hi = start + b0 * speed, start + t1 * speed  # the box's time in the take's seconds
+                for e in shots:
+                    if lo < e["t"] < hi:
+                        raise SystemExit(f"the camera moves to shot {e.get('key')!r} at {e['t']:.2f} s while the box of "
+                                         f"{b['text']!r} shows ({lo:.2f}-{hi:.2f} s): shorten the caption or move the box")
+                for r in boxes[i]:
+                    filters += drawbox(r, start=b0, end=t1)
     elif captions:
         labelled = [s for s in shots if s.get("label") and rel(s["t"]) > 4.6]
         for i, shot in enumerate(labelled):

@@ -151,3 +151,116 @@ def test_reel_refuses_mixed_resolutions_before_encoding(tmp_path, private_tmp):
     spec_path.write_text(json.dumps({"segments": [{"file": str(a)}, {"file": str(b)}]}))
     with pytest.raises(SystemExit, match="1080x1080"):
         edit_demo.build_reel(spec_path, tmp_path / "reel.mp4")
+
+
+# ---------------------------------------------------------------- highlight boxes and held captions
+
+def test_box_forms_resolve_to_frame_rectangles():
+    """Numbers are drawn as given; a camlog rect is grown by border + 4 px (12 px) and clipped to the frame."""
+    log = LOG + [{"t": 9.0, "kind": "shot", "key": "row", "rect": [100, 200, 300, 40]},
+                 {"t": 9.5, "kind": "mark", "key": "cell", "rect": [10, 20, 30, 40]}]
+    assert edit_demo.beat_boxes({"box": [1, 2, 3, 4]}, log) == [(1, 2, 3, 4)]
+    assert edit_demo.beat_boxes({"box": [[1, 2, 3, 4], [5, 6, 7, 8]]}, log) == [(1, 2, 3, 4), (5, 6, 7, 8)]
+    assert edit_demo.beat_boxes({"box": "shot:row"}, log) == [(88, 188, 324, 64)]
+    assert edit_demo.beat_boxes({"box": "mark:cell"}, log) == [(0, 8, 52, 64)]
+    assert edit_demo.beat_boxes({}, log) == []
+
+
+@pytest.mark.parametrize("box", [[0, 0, 0, 10], [1900, 10, 40, 10], [10, 1075, 10, 10], [-1, 0, 5, 5], "shot:hero"])
+def test_a_box_outside_the_frame_without_size_or_without_a_rect_aborts(box):
+    with pytest.raises(SystemExit) as stop:
+        edit_demo.beat_boxes({"box": box, "text": "x"}, LOG)      # shot:hero has no rect in LOG
+    assert "box" in str(stop.value)
+
+
+def test_a_box_waits_for_the_camera_on_a_shot_anchor():
+    assert edit_demo.box_delay({"at": "shot:stage"}, 1.25) == pytest.approx(1.4 / 1.25 + 0.2)
+    assert edit_demo.box_delay({"at": "shot:stage"}, 4) == pytest.approx(1.4 / 4 + 0.2)
+    assert edit_demo.box_delay({"at": "play"}, 1.25) == 0
+    assert edit_demo.box_delay({"at": "shot:stage", "box_delay": 0.5}, 1.25) == 0.5
+
+
+def test_caption_band_follows_the_caption_constants():
+    bottom, top = edit_demo.caption_band(None), edit_demo.caption_band("top")
+    assert edit_demo.caption_band("bottom") == bottom
+    assert top[0] < top[1] < bottom[0] < bottom[1] <= edit_demo.H
+    assert bottom[0] == edit_demo.H - 150 - 18 and top[0] == 120 - 18
+
+
+def grey_take(tmp_path, camlog, seconds=10):
+    video = tmp_path / "grey.webm"
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", f"color=c=0x808080:size=1920x1080:rate=30:duration={seconds}",
+                    "-c:v", "libvpx", "-pix_fmt", "yuv420p", str(video)], check=True)
+    (tmp_path / "grey.camlog.json").write_text(json.dumps({"log": camlog}))
+    return video
+
+
+def clip_of(tmp_path, video, beats):
+    script = tmp_path / "story.json"
+    script.write_text(json.dumps({"speed": 1, "start": 0, "beats": beats}))
+    out = tmp_path / "grey.mp4"
+    edit_demo.build_clip(video, out, None, None, None, None, True, None, script)
+    return out
+
+
+def pixel(video, x, y, *, at=None, from_end=None, tmp):
+    from PIL import Image
+    png = tmp / f"p{at}{from_end}.png"
+    seek = ["-ss", str(at)] if from_end is None else ["-sseof", str(-from_end)]
+    subprocess.run(["ffmpeg", "-v", "error", "-y", *seek, "-i", str(video), "-frames:v", "1", str(png)], check=True)
+    return Image.open(png).convert("RGB").getpixel((x, y))
+
+
+def is_red(p):
+    return p[0] > 200 and p[1] < 100 and p[2] < 100
+
+
+BOX = [400, 300, 400, 200]
+BORDER, MIDDLE = (404, 400), (600, 400)   # inside the 8 px left border; inside the box
+
+
+@needs_ffmpeg
+def test_clip_draws_the_box_after_its_delay_and_until_its_caption_ends(tmp_path, private_tmp):
+    video = grey_take(tmp_path, [{"t": 0.5, "kind": "shot", "key": "hero"}])
+    out = clip_of(tmp_path, video, [{"at": 2.0, "dur": 4, "text": "look", "box": BOX, "box_delay": 1.0}])
+    assert not is_red(pixel(out, *BORDER, at=2.5, tmp=tmp_path)), "before the delay"
+    assert is_red(pixel(out, *BORDER, at=4.0, tmp=tmp_path)), "inside the caption's time"
+    assert not is_red(pixel(out, *BORDER, at=7.0, tmp=tmp_path)), "after the caption"
+    mid = pixel(out, *MIDDLE, at=4.0, tmp=tmp_path)
+    assert all(abs(c - 128) < 6 for c in mid), "the middle keeps the take's colour"
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("hold, red", [(True, True), (False, False)])
+def test_a_held_caption_and_its_box_are_on_the_last_frame(tmp_path, private_tmp, hold, red):
+    video = grey_take(tmp_path, [{"t": 0.5, "kind": "shot", "key": "hero"}])
+    beat = {"at": 6.0, "dur": 1.5, "text": "stay", "box": BOX}
+    if hold:
+        beat["hold"] = True
+    out = clip_of(tmp_path, video, [beat])
+    assert is_red(pixel(out, *BORDER, from_end=0.1, tmp=tmp_path)) is red
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("pos, box", [(None, [400, 920, 400, 40]), ("top", [400, 110, 400, 40])])
+def test_a_box_under_its_caption_stops_the_clip(tmp_path, private_tmp, pos, box):
+    video = grey_take(tmp_path, [{"t": 0.5, "kind": "shot", "key": "hero"}])
+    beat = {"at": 2.0, "text": "x", "box": box}
+    if pos:
+        beat["pos"] = pos
+    with pytest.raises(SystemExit, match="pos"):
+        clip_of(tmp_path, video, [beat])
+
+
+@needs_ffmpeg
+def test_a_camera_move_while_a_box_shows_stops_the_clip(tmp_path, private_tmp):
+    video = grey_take(tmp_path, [{"t": 0.5, "kind": "shot", "key": "hero"}, {"t": 4.0, "kind": "shot", "key": "late"}])
+    with pytest.raises(SystemExit, match="late"):
+        clip_of(tmp_path, video, [{"at": 2.0, "dur": 4, "text": "x", "box": BOX, "box_delay": 1.0}])
+
+
+@needs_ffmpeg
+def test_hold_is_refused_on_a_beat_that_is_not_the_last(tmp_path, private_tmp):
+    video = grey_take(tmp_path, [{"t": 0.5, "kind": "shot", "key": "hero"}])
+    with pytest.raises(SystemExit, match="hold"):
+        clip_of(tmp_path, video, [{"at": 2.0, "text": "a", "hold": True}, {"at": 6.0, "text": "b"}])
