@@ -67,7 +67,8 @@ OWN_SOUND_RANGE_DB = 33.0    # a voice file's sound is what lies within this man
 FILE_LENGTH_TOLERANCE = 0.05  # s a voice file may differ from the length the plan records before it counts as changed
 VOICE_TOLERANCE = 0.25       # s a voice may start or end away from its plan
 LENGTH_TOLERANCE = 0.1       # s between the video's and the audio's length
-LOUDNESS_TOLERANCE = 1.5     # LU around the target (edit_demo.VOICE_LOUDNESS, -16 LUFS)
+LOUDNESS_TOLERANCE = edit_demo.VOICE_LOUDNESS_TOLERANCE   # 1.5 LU around the target (edit_demo.VOICE_LOUDNESS, -16 LUFS);
+                             # the reel's own step takes one gain that lands within it rather than compress
 LOUDNESS_FILTER = "ebur128=peak=true:framelog=verbose"   # EBU R128 meter with true peak; frame lines kept out of the log
 CROSSES_STD = 28             # flag "crosses"
 LOW_CONTRAST_REDNESS = 0.6   # flag "low_contrast"

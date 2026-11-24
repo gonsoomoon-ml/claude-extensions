@@ -498,6 +498,7 @@ VOICE_GAP = 0.6          # seconds of silence at least between two voices (manif
 VOICE_TAIL = 1.0         # seconds the reel runs on after the last voice (manifest "voice_tail")
 VOICE_LOUDNESS = -16.0   # integrated loudness of the voice track, LUFS (manifest "loudness")
 VOICE_TRUE_PEAK = -1.5   # dBTP
+VOICE_LOUDNESS_TOLERANCE = 1.5   # LU a reel may stay under "loudness" with one gain (check_demo.py audit's tolerance)
 VOICE_RATE = 48000
 # ffmpeg 4.4's loudnorm applies one gain only when the track's loudness range fits its target range; with a narrower
 # target it compresses instead, which changes the voices' levels against each other and can miss the target by over 1 LU
@@ -708,8 +709,13 @@ def _mix_voices(voices: list[dict], track: Path) -> None:
 
 
 def _loudness_filter(track: Path, target: float) -> tuple[str, str | None]:
-    """The filter that brings `track` to `target` LUFS integrated, true peak at most VOICE_TRUE_PEAK (ffmpeg's loudnorm,
-    second pass with the first pass's measurement: one gain), and a warning when that cannot be one plain gain."""
+    """The filter that brings `track` towards `target` LUFS integrated with its true peak at most VOICE_TRUE_PEAK, and a
+    note for the plan's warnings. Measured with loudnorm's first pass, then:
+      1. one gain reaches the target under the ceiling: loudnorm's second pass in linear mode (one gain), no note;
+      2. it does not, but the largest gain the ceiling allows (or a plain gain where the loudness range is too wide for
+         loudnorm's linear mode) lands within VOICE_LOUDNESS_TOLERANCE of the target: that one gain ("volume"), and a
+         note that says the level reached when it is under the target;
+      3. else loudnorm compresses (its dynamic mode), which changes the voices' levels against each other: a note."""
     base = f"loudnorm=I={target:g}:TP={VOICE_TRUE_PEAK:g}:LRA={LOUDNORM_LRA}"
     cmd = ["ffmpeg", "-hide_banner", "-nostats", "-i", str(track), "-af", base + ":print_format=json", "-f", "null", "-"]
     print("+", " ".join(shlex.quote(c) for c in cmd), file=sys.stderr)
@@ -725,12 +731,22 @@ def _loudness_filter(track: Path, target: float) -> tuple[str, str | None]:
         raise SystemExit(f"reel: measuring the loudness of the voice track failed (ffmpeg loudnorm): {last}")
     if not level > -70:
         return "anull", "the voices are silent: the voice track is left as it is"
-    note = None
-    if peak + target - level > VOICE_TRUE_PEAK or lra > LOUDNORM_LRA:
-        note = (f"the voice track cannot reach {target:g} LUFS by one gain (true peak {peak:.1f} dBTP at {level:.1f} LUFS, "
-                f"loudness range {lra:.1f} LU): loudnorm compresses instead, so the voices' levels against each other change")
-    return (base + f":measured_I={level}:measured_TP={peak}:measured_LRA={lra}:measured_thresh={thresh}"
-            f":offset={offset}:linear=true"), note
+    second_pass = (base + f":measured_I={level}:measured_TP={peak}:measured_LRA={lra}:measured_thresh={thresh}"
+                   f":offset={offset}:linear=true")
+    need, room = target - level, VOICE_TRUE_PEAK - peak   # the gain the target asks for, the most the ceiling allows
+    if need <= room and lra <= LOUDNORM_LRA:
+        return second_pass, None
+    gain = min(need, room)
+    if level + gain >= target - VOICE_LOUDNESS_TOLERANCE:
+        note = None if gain == need else (
+            f"the voice track is brought to {level + gain:.1f} LUFS, not {target:g} LUFS: one gain of {gain:+.1f} dB is the "
+            f"most its true peak ({peak:.1f} dBTP at {level:.1f} LUFS) allows under {VOICE_TRUE_PEAK:g} dBTP, so the voices "
+            f"keep their levels against each other")
+        return f"volume={gain:.2f}dB", note
+    return second_pass, (
+        f"the voice track cannot reach {target:g} LUFS by one gain (true peak {peak:.1f} dBTP at {level:.1f} LUFS, loudness "
+        f"range {lra:.1f} LU; the most one gain allows is {level + gain:.1f} LUFS, more than {VOICE_LOUDNESS_TOLERANCE:g} LU "
+        f"short): loudnorm compresses instead, so the voices' levels against each other change")
 
 
 def _voices_off_plan(voices: list[dict], lengths: list[float], gap: float, tail: float) -> str | None:

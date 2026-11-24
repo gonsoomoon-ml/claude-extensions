@@ -392,6 +392,10 @@ def test_audit_passes_a_correct_reel_whose_voice_files_are_much_quieter(tmp_path
         assert abs(v["start_off"]) < 0.2 and abs(v["end_off"]) < 0.2
 
 
+def test_the_audit_holds_the_loudness_to_the_tolerance_the_reel_aims_within():
+    assert check_demo.LOUDNESS_TOLERANCE == edit_demo.VOICE_LOUDNESS_TOLERANCE == 1.5
+
+
 def test_the_clip_steps_helpers_are_used_by_their_public_names():
     assert not re.findall(r"edit_demo\._\w+", CHECK.read_text())
     assert callable(edit_demo.stream_seconds) and callable(edit_demo.write_json_atomic)

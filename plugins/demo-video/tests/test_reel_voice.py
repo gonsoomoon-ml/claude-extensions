@@ -251,10 +251,46 @@ def test_reel_brings_the_voices_to_the_loudness_target(tmp_path, private_tmp, ta
     manifest = {"segments": [{"file": str(clip), "start": 0, "end": 3, "voice": str(voice), "voice_at": 0.5}]}
     if target is not None:
         manifest["loudness"] = target
-    out, _ = build(tmp_path, manifest)
+    out, plan = build(tmp_path, manifest)
     level = loudness(out)
     assert level["integrated"] == pytest.approx(-16 if target is None else target, abs=1.0)
     assert level["true_peak"] <= -1.0
+    assert not [w for w in plan["warnings"] if "LUFS" in w], "one gain reaches the target: nothing to say"
+
+
+def make_peaky_tone(path: Path, seconds: float, low: float, high: float, at: float = 1.0) -> Path:
+    """A tone of amplitude `low` with 10 ms at amplitude `high` from `at` s: its true peak lies far above its loudness, as
+    speech's does."""
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i",
+                    f"aevalsrc=({low}+between(t\\,{at}\\,{at + 0.01})*({high}-{low}))*sin(2*PI*440*t):s=24000:d={seconds}",
+                    str(path)], check=True)
+    return path
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("seconds, peak", [(5.0, 0.22), (2.5, 0.20)])   # each about 1 LU short (-16.9 and -17.2 LUFS)
+def test_reel_takes_the_largest_gain_the_true_peak_allows_when_it_lands_within_the_tolerance(tmp_path, private_tmp,
+                                                                                          seconds, peak):
+    """A line whose peak leaves too little room for -16 LUFS by about 1 dB (real speech left 6.2 dB of room where 6.9 dB
+    were needed): one gain up to the true-peak ceiling, the reel about 1 LU under the target, the levels of the voices
+    against each other kept, and the plan says what was reached. A short track (2.5 s) is no different."""
+    a, b = make_clip(tmp_path / "a.mp4", seconds + 1, "red"), make_clip(tmp_path / "b.mp4", 3, "blue")
+    peaky = make_peaky_tone(tmp_path / "peaky.wav", seconds, 0.05, peak)
+    soft = make_peaky_tone(tmp_path / "soft.wav", 2.0, 0.025, 0.025)               # the same tone 6 dB lower, no peak
+    out, plan = build(tmp_path, {"segments": [
+        {"file": str(a), "start": 0, "end": seconds + 1, "voice": str(peaky), "voice_at": 0.3},
+        {"file": str(b), "start": 0, "end": 3, "voice": str(soft), "voice_at": 0.3}]})
+    (note,) = [w for w in plan["warnings"] if "LUFS" in w]
+    reached = float(re.search(r"brought to (-[0-9.]+) LUFS", note).group(1))
+    assert -16 - 1.5 <= reached <= -16 - 0.3, note
+    assert "one gain" in note and "true peak" in note and "compress" not in note, note
+    level = loudness(out)
+    assert level["integrated"] == pytest.approx(reached, abs=0.3)
+    assert level["true_peak"] <= edit_demo.VOICE_TRUE_PEAK + 0.3
+    v0, v1 = plan["voices"]
+    calm = (1.2, seconds - 1.3) if seconds > 3 else (0.0, 0.9)    # the first voice's tone away from its peak
+    gap = max_volume(out, v0["start"] + calm[0], calm[1]) - max_volume(out, v1["start"] + 0.2, 1.5)
+    assert gap == pytest.approx(6.0, abs=0.5), "one gain: the 6 dB between the two voices stay"
 
 
 @needs_ffmpeg
@@ -266,7 +302,7 @@ def test_reel_warns_when_one_gain_cannot_reach_the_loudness_target(tmp_path, pri
     subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i",
                     "aevalsrc=0.03*sin(2*PI*440*t)+between(t\\,2\\,2.01)*0.9*sin(2*PI*440*t):s=24000:d=5", str(voice)], check=True)
     out, plan = build(tmp_path, {"segments": [{"file": str(clip), "start": 0, "end": 6, "voice": str(voice), "voice_at": 0.5}]})
-    assert any("cannot reach -16 LUFS by one gain" in w for w in plan["warnings"]), plan["warnings"]
+    assert any("cannot reach -16 LUFS by one gain" in w and "compresses" in w for w in plan["warnings"]), plan["warnings"]
     level = loudness(out)
     # the click reaches the ceiling, so the ceiling is pinned here: loudnorm keeps -1.5 dBTP, and the AAC encode after
     # it may add a few tenths of a dB, hence the 0.3 dB margin
