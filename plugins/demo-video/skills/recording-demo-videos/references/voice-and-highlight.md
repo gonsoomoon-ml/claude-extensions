@@ -15,7 +15,7 @@ Workflow in one line: lines (text) → `voice` → clips with `hold` → reel ma
 
 Every `focus` and `region` shot now writes `"rect": [x, y, w, h]` into the camlog: where its target lies on the 1920×1080 frame once the camera has stopped (integers, clipped to the frame; no `rect` when the target lies wholly outside it). Two more ways to log a place without moving the camera:
 
-- `await rec.mark('cell', '#total', 'the total')` writes a `"mark"` entry with the element's `rect`. A selector that matches nothing writes `missing: true` and prints a warning, as `focus` does; grep the camlog for it.
+- `await rec.mark('cell', '#total', 'the total')` (a fourth argument, the index among several matches, defaults to 0) writes a `"mark"` entry with the element's `rect`. A selector that matches nothing writes `missing: true` and prints a warning, as `focus` does; grep the camlog for it.
 - `await markRows(rec, page, 'rows', 'first text', 'last text', 'three rows')` from `term.mjs` does the same for the terminal rows between two texts.
 
 A beat then points at a place by name (`"box": "shot:<key>"`, `"box": "mark:<key>"`) and can be anchored to one (`"at": "mark:<key>"`, with `#n` for the n-th entry of that key).
@@ -23,10 +23,10 @@ A beat then points at a place by name (`"box": "shot:<key>"`, `"box": "mark:<key
 Limits of the numbers, with the remedy:
 
 - The camera turns the page around the corner of the `<body>` box. On a page whose body starts at the page's corner (`body { margin: 0 }`, as most apps and the ttyd page have) everything is exact. On a page whose body box is offset (an unstyled page's 8 px margin, a centred body) two things are off:
-  - the camera frames its target off-centre (measured: 552 px on a centred 1000 px body at 1920×1080). This is older than the rectangles; a page with `body { margin: 0 }` is not affected;
-  - a region whose numbers were measured by the camera (`window.__cam.rect(…)`, `rowsRect`) while it was zoomed logs a rectangle 9 to 17 px off on an 8 px margin, and far more on a centred body. Numbers typed as page coordinates, `rec.focus` and `rec.mark` are exact (within 2 px). Measure after `rec.reset`, or use `focus` / `mark`.
+  - the camera frames its target off-centre (measured 2026-11-24: 552 px on a centred 1000 px body at 1920×1080). This is older than the rectangles; a page with `body { margin: 0 }` is not affected;
+  - a region whose numbers were measured by the camera (`window.__cam.rect(…)`, `rowsRect`) while it was zoomed logs a rectangle 9 to 17 px off on an 8 px margin (measured 2026-11-24), and far more on a centred body. Numbers typed as page coordinates, `rec.focus` and `rec.mark` are exact (within 2 px). Measure after `rec.reset`, or use `focus` / `mark`.
 - `rowsRect`, `zoomRows` and `markRows` need `rec.install()` first; without it they stop with a TypeError.
-- A rectangle from the camlog was measured at `1920x1080` and `--layout 1280x720` within 2 px of the frame's pixels.
+- A rectangle from the camlog was measured on 2026-11-24 at `1920x1080` and `--layout 1280x720` within 2 px of the frame's pixels.
 
 ## 2. Boxes and held captions in a clip script
 
@@ -43,7 +43,7 @@ A red border 8 px wide with a 2 px dark line outside it, drawn over the real fra
 
 The clip step stops before ffmpeg starts, with a message that names the fix, when:
 
-- a box lies outside the frame, or a `shot:` / `mark:` entry has no `rect`;
+- typed numbers lie outside the frame, or a `shot:` / `mark:` entry has no `rect` (a camlog rectangle is grown and then clipped to the frame, so a `shot:` box at the edge is drawn, not refused);
 - a box lies under its caption: the lower third is y 912 to 992, `"pos": "top"` is y 102 to 182. This check assumes a one-line caption and compares the vertical range only;
 - the box could never show (its caption has under 1 s of room, or `box_delay` outlasts the caption);
 - the camera moves to a new shot while a box shows. The message reads `the camera moves to shot 'log' at 7.33 s while the box of '<text>' shows (5.83-8.96 s): shorten the caption or move the box`. For a held caption without `box_dur` it advises giving the box a `"box_dur"` instead, because a held caption cannot be shortened;
@@ -76,7 +76,8 @@ python3 scripts/edit_demo.py voice lines.json --out voice/ [--readings readings.
 - Synthesis calls `aws polly synthesize-speech`, so it needs the AWS CLI with permission for `polly:SynthesizeSpeech`. Nothing else in the plugin calls AWS. The defaults are voice `Seoyeon`, engine `generative`, language `ko-KR`; `--region` or the CLI's own environment picks the region. These are the values chosen on 2026-11-24 for the first Korean narration; other voices and engines were not tried for this document, so choose by ear.
 - `--readings` is `{"<written>": "<spoken>"}`, plain substrings applied longest key first, once per position (`"S3": "에스삼"`). `--hangul-only` refuses a line that still holds a Latin letter or a digit after the readings; use both so that a name is never read in a way you did not choose.
 - A line whose spoken text, voice, engine and language are unchanged is not synthesized again (`voice: <name>: unchanged`), so a re-run costs only the lines you edited.
-- It refuses, before any call, a blank line, a name that is not a plain file name, a line over 1000 characters, and a line that begins with `file://`, `fileb://`, `http://` or `https://` (the CLI would load it instead of speak it). The text is passed as `--text=<text>`, so a line that begins with a dash is spoken, not read as an option.
+- It refuses, before any call, a blank line, a line that is neither text nor `{"audio": …}`, an `{"audio": …}` file that does not exist, a name that is not a plain file name, a line over 1000 characters, and a line that begins with `file://`, `fileb://`, `http://` or `https://` (the CLI would load it instead of speak it). The text is passed as `--text=<text>`, so a line that begins with a dash is spoken, not read as an option.
+- The cache also needs the mp3 to exist. `voice` prints the `voice.json` it wrote on stdout.
 - A failed call stops the run, removes that line's file and leaves `voice.json` with the lines done so far.
 
 Write each line to be heard together with the frames it plays over: it says only what those frames show. Keep a line under about 14 s (the reel warns above that).
@@ -88,25 +89,26 @@ End a clip whose last frame the reel will hold with a held caption (`"hold": tru
 ```json
 {"fade": 0.4, "voice_gap": 0.6, "voice_tail": 1.0, "loudness": -16, "segments": [
  {"image": "clips/card-intro.png", "seconds": 3, "voice": "voice/intro.mp3", "voice_at": 0.3},
- {"file": "clips/take.1.mp4", "start": 0, "end": 4.5, "voice": "voice/log.mp3", "voice_at": 0.3, "group": "a"},
- {"file": "clips/take.1.mp4", "start": 4.5, "end": 9.9, "group": "a"}
+ {"file": "clips/take.1.mp4", "start": 0, "end": 4.5, "voice": "voice/log.mp3", "voice_at": 0.3, "group": "a", "fade_out": 0},
+ {"file": "clips/take.1.mp4", "start": 4.5, "end": 9.9, "group": "a", "fade_in": 0}
 ]}
 ```
 
 - **A card under narration is a picture segment** (`image`, `seconds`). A card clip made by `make_cards.py` has its fade baked in, so holding its last frame gives black. Use the card's `.png`; it is drawn for as long as the voice needs.
 - **The schedule.** A voice starts `voice_at` seconds into its segment. The reel holds the last frame of a segment so that the picture never runs ahead of a voice and no two voices overlap: (1) a voice that ends after the last segment of its run-on range is held by the difference; (2) the next voice starts at least `voice_gap` (0.6 s) after this one ends, the segment just before it being held by the missing time; (3) the reel runs `voice_tail` (1.0 s) past the last voice. `group` lets a voice run on over the following segments with an equal, non-empty group (a long wait that the voice talks across); without it a voice's range is its own segment.
 - **Voices are placed by measured lengths.** Each part is encoded and measured, and a voice goes at the measured start of its part plus `voice_at`, not at the lengths the manifest states: a clip a few frames longer than stated would otherwise shift every later voice.
-- **The sound.** The clips' own audio is dropped: the voice track is the reel's only sound. The voices are mixed and brought to `loudness` (−16 LUFS integrated, true peak at most −1.5 dBTP) with one gain, so their levels against each other stay as synthesized.
-- **Output.** `reel.mp4` as before and `reel.voice.json` beside it: each segment's measured start, length and hold, each voice's measured start and end, and `warnings`. Warnings do not stop the reel: a hold over 6 s, holds over 30 % of the reel, a voice over 14 s, and a voice track that one gain cannot bring to the target. stdout is one line with the reel's length, the number of parts and voices and the seconds held.
+- **Fades.** `fade`, `fade_in` and `fade_out` apply to a narrated reel as to any other (the hold comes before the fade-out). Pieces of one `group` are pieces of one scene: join them with `fade_out: 0` on the earlier and `fade_in: 0` on the later, or the picture dips to black while the voice runs on.
+- **The sound.** The clips' own audio is dropped: the voice track is the reel's only sound. The voices are mixed and brought to `loudness` (−16 LUFS integrated, true peak at most −1.5 dBTP) with one gain, so their levels against each other stay as synthesized. The audio options were run with ffmpeg 4.4 only. A voice track shorter than about 3 s cannot be brought to the target in one step and comes out quieter, with a warning.
+- **Output.** `reel.mp4` as before and `reel.voice.json` beside it (it holds the absolute paths of the voice files; keep that in mind before sending the plan file to someone, the review page holds no paths): each segment's measured start, length and hold, each voice's measured start and end, and `warnings`. Warnings do not stop the reel: a hold over 6 s, holds over 30 % of the reel, a voice over 14 s, and a voice track that one gain cannot bring to the target. stdout is one line with the reel's length, the number of parts and voices and the seconds held.
 - **Refused before encoding:** a missing file, `start` or `end` outside the clip, two voices on one segment, a `voice_at` outside the segment, a picture without `seconds`, and `--copy` on a manifest with `voice` or `image` (`reel: --copy cannot carry voices or picture segments; leave it out`). A manifest with neither field runs exactly as before.
 
 ## 5. The checks
 
 `check_demo.py` reads finished files and never changes them. Each command prints one JSON line.
 
-**`audit reel.mp4 --out audit.json`** compares the reel's sound with its plan (`reel.voice.json` beside it, or `--plan`). It finds speech with ffmpeg's `silencedetect` and expects each voice from its planned start plus its file's first sound to its planned start plus its file's last sound: a speech file begins and ends with a little silence, so the audit reads each voice file's own first and last sound instead of its length. It reports, one line each: a voice heard more than `--tolerance` (0.25 s) early or late at either end, a planned voice with no sound, sound where no voice is planned, two voices planned closer than 0.35 s, video and audio lengths more than 0.1 s apart, an integrated loudness more than 1.5 LU from `--loudness`, and a plan without `name`, `start` or `end`. The report is written either way. Exit 0 when it passes, 1 on a problem.
+**`python3 scripts/check_demo.py audit reel.mp4 --out audit.json`** compares the reel's sound with its plan (`reel.voice.json` beside it, or `--plan`). It finds speech with ffmpeg's `silencedetect` and expects each voice from its planned start plus its file's first sound to its planned start plus its file's last sound: a speech file begins and ends with a little silence, so the audit reads each voice file's own first and last sound instead of its length. It reports, one line each: a voice heard more than `--tolerance` (0.25 s) early or late at either end, a planned voice with no sound, sound where no voice is planned, two voices planned closer than 0.35 s, video and audio lengths more than 0.1 s apart, an integrated loudness more than 1.5 LU from `--loudness`, and a plan without `name`, `start` or `end`. The report is written either way (it also holds the voice files' absolute paths). Exit 0 when it passes, 1 on a problem. A sound placed inside a voice's own pause is joined into that voice by the audit and passes.
 
-**`boxes scripts/take.1.json --raw raw/take.webm --out boxes/take.1.json`** measures each box on the raw take (never on the clip, which holds the box itself) at the box's first and last moment, and writes its rectangle, its time in the take and in the clip, and three numbers: `std` (how busy the strips under the border are), `redness` and `change` (how much the picture inside the box changes). Flags:
+**`python3 scripts/check_demo.py boxes scripts/take.1.json --raw raw/take.webm --out boxes/take.1.json`** measures each box on the raw take (never on the clip, which holds the box itself) at the box's first and last moment, and writes its rectangle, its time in the take and in the clip, and three numbers: `std` (how busy the strips under the border are), `redness` and `change` (how much the picture inside the box changes). Flags:
 
 - `crosses`: the border runs over text or a picture;
 - `low_contrast`: the strips under the border are already near the border's red;
@@ -114,9 +116,11 @@ End a clip whose last frame the reel will hold with a held caption (`"hold": tru
 
 A flag says "look at this row", not a failure: exit 0 whatever the flags. Exit 1 only when the script cannot be read or the clip step would refuse it (its own message). The script's stem must equal its clip's stem, and a script's `title` must be in the script, not only on `clip`'s command line.
 
-**`sheet reel.mp4 --plan reel.voice.json --texts texts.json [--boxes boxes/*.json] --out review/`** writes `index.json`, one JPEG per voice and `review.html`: one file to send as it is. Per voice it shows the reel's frames at start + 0.5 s, the middle and end − 0.2 s, an enlarged crop of each box, the caption, the narration, what each box points at, the flags and the times, and a play control with the reel's own sound for that voice's window. The page has no script and its only links are the in-page ones from its top list of rows and flagged rows; a flagged row has a red edge. `texts.json` is `{"<voice name>": {"caption": "…", "say": "…", "what": ["…"], "sources": ["…"]}}`, every field optional (`what[i]` goes with the i-th box).
+**`python3 scripts/check_demo.py sheet reel.mp4 --plan reel.voice.json --texts texts.json [--boxes boxes/*.json] --out review/`** writes `index.json`, one JPEG per voice and `review.html`: one file to send as it is. Per voice it shows the reel's frames at start + 0.5 s, the middle and end − 0.2 s, an enlarged crop of each box, the caption, the narration, what each box points at, the flags and the times, and a play control with the reel's own sound for that voice's window. The page has no script and its only links are the in-page ones from its top list of rows and flagged rows; a flagged row has a red edge. `texts.json` is `{"<name>": {"caption": "…", "say": "…", "what": ["…"], "sources": ["…"]}}`, every field optional (`what[i]` goes with the i-th box). **The key is the `name` of a voice in the plan file** (`reel.voice.json`), which is the stem of the segment's clip or picture file (`take.1`, `card-intro`), not the name of the line in `lines.json`: copy the keys from the plan. Two voiced segments cut from one clip share a key and so share their texts, and a boxes report attaches by the same name. A key that matches no voice and a voice with no entry are named on stderr, one line each (`sheet: texts key 'intro' matches no voice of the plan (voices: card-intro, take.1)`); the page is still written and the exit code stays 0, with those rows empty. A boxes report attaches to every row whose clip carries that name, so a clip used twice in one reel shows its boxes on both rows.
 
 ## 6. What the checks cannot see, and other limits
+
+Each limit stands where its subject is described; this is the list in one place.
 
 - **They cannot hear.** They find where sound is and how loud, not whether a word is pronounced well. A person listens with the review page.
 - A sound placed inside a voice's own pause is joined into that voice by the audit and passes.

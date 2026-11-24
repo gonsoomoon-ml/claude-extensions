@@ -122,19 +122,47 @@ README_MD = PLUGIN / "README.md"
 
 
 def test_skill_points_to_the_voice_and_highlight_reference():
-    """Boxes, held captions, narration and the checks: SKILL.md is short and sends the reader to one reference."""
+    """SKILL.md links the reference and has a quick-reference row for each new thing; no project name in either."""
     text = SKILL_MD.read_text()
     assert "](references/voice-and-highlight.md)" in text
     assert REFERENCE_MD.exists()
-    ref = REFERENCE_MD.read_text()
-    for must in ("box", "hold", "voice", "image", "group", "check_demo.py audit", "boxes", "sheet",
-                 "box_dur", "box_delay", "voice_at", "voice_gap", "voice_tail", "loudness", "mark:", "rec.mark", "markRows",
-                 "polly:SynthesizeSpeech", "--readings", "--hangul-only", "review.html", "cannot hear"):
-        assert must in ref, f"voice-and-highlight.md does not mention {must!r}"
-    for row in ("rec.mark", "\"hold\": true", "edit_demo.py voice"):
+    for row in ("rec.mark", "\"hold\": true", "python3 scripts/edit_demo.py voice", "python3 scripts/check_demo.py audit"):
         assert row in text, f"SKILL.md has no quick-reference row for {row!r}"
     for name in ("Bedrock", "AgentCore", "hosting hub", "Hosting Hub", "agent-hosting"):
-        assert name not in ref and name not in text, f"project name {name!r} in a skill document"
+        assert name not in REFERENCE_MD.read_text() and name not in text, f"project name {name!r} in a skill document"
+
+
+def _script_sources() -> str:
+    return "".join((SKILL / "scripts" / f).read_text() for f in ("edit_demo.py", "check_demo.py", "record_demo.mjs", "term.mjs"))
+
+
+def test_every_option_and_field_the_documents_name_exists_in_the_scripts():
+    """The documents pin no wording: each --option and each "field" they name in backticks must exist in the scripts."""
+    code = _script_sources()
+    docs = REFERENCE_MD.read_text() + MANIFEST_MD.read_text() + SCRIPT_MD.read_text()
+    options = set(re.findall(r"(?<![\w-])(--[a-z][a-z-]+)", docs))
+    assert {"--readings", "--hangul-only", "--tolerance", "--plan", "--texts", "--boxes", "--raw", "--copy"} <= options
+    assert sorted(o for o in options if o not in code and o != "--help") == [], "an option the documents name is not in the scripts"
+    quoted = set(re.findall(r"`\"([a-z_]+)\"", docs))
+    bare = set(re.findall(r"`([a-z_]+)`", docs))
+    names = quoted | {"image", "seconds", "voice", "voice_at", "group", "voice_gap", "voice_tail", "loudness"} & bare
+    assert {"box", "box_dur", "box_delay", "hold", "voice", "voice_at", "group", "image", "seconds", "voice_gap", "voice_tail", "loudness"} <= names
+    assert sorted(n for n in names if f'"{n}"' not in code) == [], "a field the documents name is not in the scripts"
+
+
+def test_the_default_numbers_the_documents_give_are_the_scripts_constants():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("edit_demo", SKILL / "scripts" / "edit_demo.py")
+    edit_demo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(edit_demo)
+    manifest, ref = MANIFEST_MD.read_text(), REFERENCE_MD.read_text()
+    assert float(re.search(r"`voice_gap`[^\n]*default ([0-9.]+)", manifest).group(1)) == edit_demo.VOICE_GAP
+    assert float(re.search(r"`voice_tail`[^\n]*default ([0-9.]+)", manifest).group(1)) == edit_demo.VOICE_TAIL
+    assert float(re.search(r"`loudness`[^\n]*default (-?[0-9.]+)", manifest).group(1)) == edit_demo.VOICE_LOUDNESS
+    assert float(re.search(r"`voice_gap` \(([0-9.]+) s\)", ref).group(1)) == edit_demo.VOICE_GAP
+    assert float(re.search(r"`voice_tail` \(([0-9.]+) s\)", ref).group(1)) == edit_demo.VOICE_TAIL
+    assert float(re.search(r"[−-]([0-9.]+) LUFS", ref).group(1)) == -edit_demo.VOICE_LOUDNESS
+    assert float(re.search(r"a hold over ([0-9.]+) s", ref).group(1)) == edit_demo.WARN_HOLD
 
 
 def test_the_reference_documents_name_the_new_fields():

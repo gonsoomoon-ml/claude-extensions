@@ -40,8 +40,8 @@ A segment may carry a voice, and a segment may be a picture instead of a clip. A
 ```json
 {"fade": 0.4, "voice_gap": 0.6, "voice_tail": 1.0, "loudness": -16, "segments": [
  {"image": "clips/card-intro.png", "seconds": 3, "voice": "voice/intro.mp3", "voice_at": 0.3},
- {"file": "clips/take.1.mp4", "start": 0, "end": 4.5, "voice": "voice/log.mp3", "voice_at": 0.3, "group": "a"},
- {"file": "clips/take.1.mp4", "start": 4.5, "end": 9.9, "group": "a"}
+ {"file": "clips/take.1.mp4", "start": 0, "end": 4.5, "voice": "voice/log.mp3", "voice_at": 0.3, "group": "a", "fade_out": 0},
+ {"file": "clips/take.1.mp4", "start": 4.5, "end": 9.9, "group": "a", "fade_in": 0}
 ]}
 ```
 
@@ -57,6 +57,8 @@ A segment may carry a voice, and a segment may be a picture instead of a clip. A
 
 - The reel holds a segment's last frame until its voice has ended, mixes the voices into the reel's only sound (the clips' own audio is dropped) and places each voice by the measured length of the parts before it, not by the lengths the manifest states.
 - It writes `<reel stem>.voice.json` beside the reel: each segment's measured `start`, `seconds` and `hold`, each voice's measured `start` and `end`, and `warnings` (a hold over 6 s, holds over 30 % of the reel, a voice over 14 s, a voice track that one gain cannot bring to the target; none of them stops the reel). `check_demo.py audit` and `sheet` read that file.
+- `fade`, `fade_in` and `fade_out` apply to a narrated reel as to any other. Pieces of one `group` are one scene: `fade_out: 0` on the earlier and `fade_in: 0` on the later, as in the example, or the picture dips to black while the voice runs on.
+- The plan file holds the absolute paths of the voice files.
 - `--copy` is refused for a narrated reel.
 - A voice track shorter than about 3 s comes out quieter than the target, with a warning.
 
