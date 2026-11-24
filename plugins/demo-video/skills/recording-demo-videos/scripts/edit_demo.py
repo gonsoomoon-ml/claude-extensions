@@ -2,6 +2,7 @@
 """Turn raw Playwright recordings (webm + camlog.json) into LinkedIn-ready MP4 clips.
 
   python3 edit_demo.py clip raw/intro.webm --script scripts/intro.json
+  python3 edit_demo.py voice lines.json --out voice/ [--readings readings.json] [--hangul-only]   # Amazon Polly narration
   python3 edit_demo.py clip raw/intro.webm --title "…" --subtitle "…"      # no story: shot labels as captions
   python3 edit_demo.py reel reel.json --out reel.mp4
 
@@ -50,9 +51,12 @@ Script JSON:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import re
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -349,6 +353,102 @@ def build_reel(spec: Path, out: Path, copy: bool = False) -> None:
             run(["ffmpeg", "-y", "-v", "error", "-i", str(joined), *REEL_ENCODE, "-movflags", "+faststart", str(out)])
     print(json.dumps({"out": str(out), "seconds": round(probe_duration(out), 1), "parts": len(parts)}))
 
+# ---------------------------------------------------------------- voice (Amazon Polly through the AWS CLI)
+
+MAX_LINE_CHARS = 1000  # one call per line; the service limits a call's text and this tool does not split lines
+
+
+def spoken(text: str, readings: dict[str, str]) -> str:
+    """Apply the readings table: plain substrings, longest key first, each position replaced at most once."""
+    if not readings:
+        return text
+    keys = sorted((k for k in readings if k), key=len, reverse=True)
+    pattern = re.compile("|".join(re.escape(k) for k in keys))
+    return pattern.sub(lambda m: readings[m.group(0)], text)
+
+
+def unreadable(text: str) -> list[str]:
+    """Runs of Latin letters or digits left in a text, in order (a synthesizer reads them in its own way)."""
+    return re.findall(r"[A-Za-z]+|[0-9]+", text)
+
+
+def _write_json_atomic(path: Path, data: dict) -> None:
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def _voice_key(text: str, voice: str, engine: str, language: str) -> str:
+    return hashlib.sha256("\0".join([text, voice, engine, language]).encode("utf-8")).hexdigest()
+
+
+def synthesize(lines: dict, out: Path, *, voice: str, engine: str, language: str, region: str | None,
+               readings: dict[str, str], hangul_only: bool) -> dict:
+    """One mp3 per narration line in `out`, plus voice.json (rewritten after every synthesized line).
+
+    A line is a text or {"audio": file} (a recorded file, copied as it is). Every check runs before the first call;
+    a line whose spoken text, voice, engine and language are unchanged (and whose file exists) is not synthesized again.
+    """
+    problems, texts = [], {}
+    for name, line in lines.items():
+        if isinstance(line, dict):
+            if not Path(str(line.get("audio", ""))).is_file():
+                problems.append(f"{name}: audio file not found: {line.get('audio')}")
+            continue
+        if not isinstance(line, str) or not line.strip():
+            problems.append(f"{name}: blank line")
+            continue
+        texts[name] = spoken(line, readings)
+        if len(texts[name]) > MAX_LINE_CHARS:
+            problems.append(f"{name}: line too long ({len(texts[name])} characters, at most {MAX_LINE_CHARS})")
+        elif hangul_only and unreadable(texts[name]):
+            problems.append(f"{name}: not Hangul only, left: {', '.join(unreadable(texts[name]))}")
+    if problems:
+        raise SystemExit("voice: refused before any call:\n  " + "\n  ".join(problems))
+
+    out.mkdir(parents=True, exist_ok=True)
+    index = out / "voice.json"
+    try:
+        old = json.loads(index.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        old = {}
+    entries = {n: old[n] for n in lines if isinstance(old.get(n), dict)}
+    for name, line in lines.items():
+        if isinstance(line, dict):
+            src = Path(line["audio"])
+            target = out / (name + src.suffix)
+            if src.resolve() != target.resolve():
+                shutil.copyfile(src, target)
+            entries[name] = {"file": target.name, "seconds": round(probe_duration(target), 2), "spoken": "",
+                             "key": hashlib.sha256(target.read_bytes()).hexdigest()}
+            continue
+        text = texts[name]
+        key = _voice_key(text, voice, engine, language)
+        have = entries.get(name)
+        target = out / f"{name}.mp3"
+        if have and have.get("key") == key and (out / have.get("file", "")).is_file():
+            print(f"voice: {name}: unchanged", file=sys.stderr)
+            continue
+        cmd = ["aws", "polly", "synthesize-speech"] + (["--region", region] if region else []) + [
+            "--engine", engine, "--language-code", language, "--voice-id", voice,
+            "--output-format", "mp3", "--text", text, str(target)]
+        print(f"voice: {name}: synthesizing {len(text)} characters", file=sys.stderr)
+        try:
+            done = subprocess.run(cmd, capture_output=True, text=True)
+        except FileNotFoundError:
+            raise SystemExit("voice: the AWS CLI (aws) is not installed or not on PATH")
+        if done.returncode != 0:
+            target.unlink(missing_ok=True)
+            entries.pop(name, None)
+            _write_json_atomic(index, entries)
+            raise SystemExit(f"voice: {name}: aws polly synthesize-speech failed ({done.returncode}): "
+                             f"{(done.stderr or done.stdout).strip()}")
+        entries[name] = {"file": target.name, "seconds": round(probe_duration(target), 2), "spoken": text, "key": key}
+        _write_json_atomic(index, entries)
+    result = {n: entries[n] for n in lines}
+    _write_json_atomic(index, result)
+    return result
+
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -367,7 +467,22 @@ def main() -> None:
     r.add_argument("spec", type=Path)
     r.add_argument("--out", type=Path, required=True)
     r.add_argument("--copy", action="store_true", help="1.2.0 behaviour: stream-copy concat (QuickTime may stall mid-video)")
+    v = sub.add_parser("voice", help="narration lines -> one mp3 each with Amazon Polly (AWS CLI), plus voice.json")
+    v.add_argument("lines", type=Path, help='JSON: {"<name>": "<text>" | {"audio": "<file>"}}')
+    v.add_argument("--out", type=Path, required=True)
+    v.add_argument("--voice", default="Seoyeon")
+    v.add_argument("--engine", default="generative")
+    v.add_argument("--language", default="ko-KR")
+    v.add_argument("--region")
+    v.add_argument("--readings", type=Path, help='JSON: {"<written>": "<spoken>"}, applied longest key first')
+    v.add_argument("--hangul-only", action="store_true", help="refuse a line that still holds Latin letters or digits")
     a = ap.parse_args()
+    if a.cmd == "voice":
+        readings = json.loads(a.readings.read_text(encoding="utf-8")) if a.readings else {}
+        result = synthesize(json.loads(a.lines.read_text(encoding="utf-8")), a.out, voice=a.voice, engine=a.engine,
+                            language=a.language, region=a.region, readings=readings, hangul_only=a.hangul_only)
+        print(json.dumps(result, ensure_ascii=False))
+        return
     if a.cmd == "clip":
         out = a.out or Path("clips") / (a.raw.stem + ".mp4")
         build_clip(a.raw, out, a.title, a.subtitle, a.start, a.end, not a.no_captions, a.tag, a.script)
