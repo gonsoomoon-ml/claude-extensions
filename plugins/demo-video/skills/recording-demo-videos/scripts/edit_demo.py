@@ -446,6 +446,27 @@ def _number(value) -> float | None:
         return None
 
 
+def _stream_seconds(path: Path, kind: str, picture: bool = False) -> float | None:
+    """Length of the first video ("v") or audio ("a") stream of a media file: the stream's own duration (an mp4's file
+    length runs a few ms past its video, to the last audio packet), else the file's, else 0. None when ffprobe cannot
+    read the file or it has no such stream; a picture is decoded too (its reader goes by the file name alone)."""
+    done = subprocess.run(["ffprobe", "-v", "error", "-select_streams", f"{kind}:0", *(["-count_frames"] if picture else []),
+                           "-show_entries", "stream=duration,nb_read_frames:format=duration", "-of", "json", str(path)],
+                          capture_output=True, text=True)
+    try:
+        info = json.loads(done.stdout) if done.returncode == 0 else {}
+    except ValueError:
+        info = {}
+    if not info.get("streams"):
+        return None
+    if picture and (_number(info["streams"][0].get("nb_read_frames")) or 0) < 1:
+        return None
+    for value in (info["streams"][0].get("duration"), info.get("format", {}).get("duration")):
+        if (seconds := _number(value)) is not None and seconds > 0:
+            return seconds
+    return 0.0
+
+
 def _narrated_segments(cfg: dict) -> tuple[list[dict], tuple[int, int]]:
     """Every segment of a narrated reel, checked and measured (clip windows, voice lengths) before anything is encoded,
     and the reel's frame size (the clips' size; W x H when there are only pictures, which are scaled to fit it)."""
@@ -462,14 +483,32 @@ def _narrated_segments(cfg: dict) -> tuple[list[dict], tuple[int, int]]:
         if not src.is_file():
             problems.append(f"{label}: file not found: {src}")
             continue
+        length = _stream_seconds(src, "v", picture=is_image)
+        if length is None:
+            problems.append(f"{label}: cannot read {src} as {'a picture' if is_image else 'a video'}")
+            continue
         if is_image:
             start, seconds = 0.0, _number(seg.get("seconds"))
             if seconds is None or seconds <= 0:
                 problems.append(f'{label}: an "image" needs "seconds" (a number above 0)')
                 continue
         else:
-            start = float(seg.get("start", 0))
-            seconds = float(seg.get("end") or probe_duration(src)) - start
+            # the window must lie inside the clip: planned on a longer window than the one encoded, voices could overlap
+            start, end = _number(seg.get("start", 0)), (length if seg.get("end") is None else _number(seg["end"]))
+            if start is None or end is None:
+                problems.append(f'{label}: "start" and "end" must be numbers of seconds')
+                continue
+            if not 0 <= start < length:
+                where = "before" if start < 0 else "beyond"
+                problems.append(f'{label}: "start" {start:g} s lies {where} the clip (0 to {length:.3f} s)')
+                continue
+            if end <= start:
+                problems.append(f'{label}: "end" {end:g} s is not after "start" {start:g} s')
+                continue
+            if end > length + 1 / FPS:  # one frame of slack: an end written as the clip's rounded length
+                problems.append(f'{label}: "end" {end:g} s lies beyond the clip (its video is {length:.3f} s long)')
+                continue
+            seconds = min(end, length) - start
         item = {"name": src.stem, "src": src, "image": is_image, "start": start, "seconds": seconds,
                 "fade_in": float(seg.get("fade_in", fade)), "fade_out": float(seg.get("fade_out", fade)),
                 "group": seg.get("group")}
@@ -482,11 +521,15 @@ def _narrated_segments(cfg: dict) -> tuple[list[dict], tuple[int, int]]:
             if not voice.is_file():
                 problems.append(f"{label}: voice file not found: {voice}")
                 continue
+            voice_seconds = _stream_seconds(voice, "a")
+            if voice_seconds is None:
+                problems.append(f"{label}: cannot read the voice file {voice} as audio")
+                continue
             at = _number(seg.get("voice_at", 0))
             if at is None or not 0 <= at <= seconds:
-                problems.append(f'{label}: "voice_at" {seg.get("voice_at")!r} lies outside the segment (0 to {seconds:.2f} s)')
+                problems.append(f'{label}: "voice_at" {seg.get("voice_at", 0)!r} lies outside the segment (0 to {seconds:.2f} s)')
                 continue
-            item.update(voice=voice, voice_at=at, voice_seconds=probe_duration(voice))
+            item.update(voice=voice, voice_at=at, voice_seconds=voice_seconds)
         segs.append(item)
     if problems:
         raise SystemExit("reel: refused before encoding:\n  " + "\n  ".join(problems))
@@ -538,9 +581,16 @@ def _loudness_filter(track: Path, target: float) -> tuple[str, str | None]:
     base = f"loudnorm=I={target:g}:TP={VOICE_TRUE_PEAK:g}:LRA={LOUDNORM_LRA}"
     cmd = ["ffmpeg", "-hide_banner", "-nostats", "-i", str(track), "-af", base + ":print_format=json", "-f", "null", "-"]
     print("+", " ".join(shlex.quote(c) for c in cmd), file=sys.stderr)
-    err = subprocess.run(cmd, check=True, capture_output=True, text=True).stderr
-    m = json.loads(err[err.rindex("{"):err.rindex("}") + 1])
-    level, peak, lra, thresh = (float(m[k]) for k in ("input_i", "input_tp", "input_lra", "input_thresh"))
+    done = subprocess.run(cmd, capture_output=True, text=True)
+    try:
+        if done.returncode != 0:
+            raise ValueError(done.returncode)
+        m = json.loads(done.stderr[done.stderr.rindex("{"):done.stderr.rindex("}") + 1])
+        level, peak, lra, thresh, offset = (float(m[k]) for k in ("input_i", "input_tp", "input_lra", "input_thresh",
+                                                                  "target_offset"))
+    except (ValueError, KeyError, TypeError):
+        last = (done.stderr.strip().splitlines() or ["no output"])[-1]
+        raise SystemExit(f"reel: measuring the loudness of the voice track failed (ffmpeg loudnorm): {last}")
     if not level > -70:
         return "anull", "the voices are silent: the voice track is left as it is"
     note = None
@@ -548,7 +598,23 @@ def _loudness_filter(track: Path, target: float) -> tuple[str, str | None]:
         note = (f"the voice track cannot reach {target:g} LUFS by one gain (true peak {peak:.1f} dBTP at {level:.1f} LUFS, "
                 f"loudness range {lra:.1f} LU): loudnorm compresses instead, so the voices' levels against each other change")
     return (base + f":measured_I={level}:measured_TP={peak}:measured_LRA={lra}:measured_thresh={thresh}"
-            f":offset={m['target_offset']}:linear=true"), note
+            f":offset={offset}:linear=true"), note
+
+
+def _voices_off_plan(voices: list[dict], lengths: list[float], gap: float) -> str | None:
+    """On the encoded parts: two consecutive voices closer than `gap` (or overlapping), or a last voice that ends after
+    the reel. Unreachable while schedule() gets the true window lengths (_narrated_segments refuses a window outside
+    its clip); this guards the reel against a plan made on lengths the encoded parts do not have. A part is whole
+    frames and can come out up to one frame shorter than its window, so one frame per part in between is allowed."""
+    for v0, v1 in zip(voices, voices[1:]):
+        if v1["start"] - v0["end"] < gap - (v1["segment"] - v0["segment"]) / FPS:
+            return (f"the voices of segment {v0['segment'] + 1} ({v0['name']}) and segment {v1['segment'] + 1} "
+                    f"({v1['name']}) are {v1['start'] - v0['end']:.3f} s apart, less than the gap of {gap:g} s")
+    if voices and voices[-1]["end"] > sum(lengths) + (len(lengths) - voices[-1]["segment"]) / FPS:
+        v = voices[-1]
+        return (f"the voice of segment {v['segment'] + 1} ({v['name']}) ends at {v['end']:.3f} s, "
+                f"after the reel's end at {sum(lengths):.3f} s")
+    return None
 
 
 def build_narrated_reel(spec: Path, out: Path) -> None:
@@ -576,6 +642,8 @@ def build_narrated_reel(spec: Path, out: Path) -> None:
         starts = [sum(lengths[:i]) for i in range(len(lengths))]
         voices = [{"segment": i, "name": s["name"], "file": str(s["voice"].resolve()), "start": starts[i] + s["voice_at"],
                    "end": starts[i] + s["voice_at"] + s["voice_seconds"]} for i, s in enumerate(segs) if "voice" in s]
+        if problem := _voices_off_plan(voices, lengths, gap):
+            raise SystemExit(f"reel: stopped before writing the reel: {problem}")
         lst = tmp / "list.txt"
         lst.write_text("".join(f"file '{p}'\n" for p in parts))
         joined = tmp / "joined.mp4"

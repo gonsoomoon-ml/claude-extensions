@@ -75,6 +75,16 @@ def make_clip(path: Path, seconds: float, colour: str = "red", size: str = "320x
     return path
 
 
+def make_two_colour_clip(path: Path, first: str, seconds: float, then: str, more: float, size: str = "320x180") -> Path:
+    """A finished clip that is `first` for `seconds`, then `then` for `more` seconds."""
+    colour = lambda c, d: ["-f", "lavfi", "-i", f"color=c={c}:size={size}:rate={FPS}:duration={d}"]  # noqa: E731
+    subprocess.run(["ffmpeg", "-y", "-v", "error", *colour(first, seconds), *colour(then, more),
+                    "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
+                    "-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0[v]", "-map", "[v]", "-map", "2:a", "-shortest",
+                    "-pix_fmt", "yuv420p", "-c:a", "aac", str(path)], check=True)
+    return path
+
+
 def make_tone(path: Path, seconds: float, freq: int = 440, volume_db: float = -6.0) -> Path:
     """A narration line stand-in: a mono 24 kHz tone (mp3 like the speech service, or wav), `volume_db` below full scale."""
     subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", f"sine=frequency={freq}:sample_rate=24000:duration={seconds}",
@@ -168,7 +178,11 @@ def test_reel_without_voice_runs_the_same_steps_as_before(tmp_path, private_tmp,
 
 @needs_ffmpeg
 def test_reel_holds_the_last_frame_and_carries_the_voice(tmp_path, private_tmp):
-    a, b = make_clip(tmp_path / "a.mp4", 3, "red"), make_clip(tmp_path / "b.mp4", 3, "blue")
+    """The first clip turns green after the window's end and runs on longer than the hold, so a reel that played on
+    would have the same length: only a repeated last frame shows red inside the hold."""
+    a = make_two_colour_clip(tmp_path / "a.mp4", "red", 2, "lime", 3)
+    b = make_clip(tmp_path / "b.mp4", 3, "blue")
+    assert not is_red(pixel(a, 2.5, tmp_path)), "the source plays on in another colour"
     voice = make_tone(tmp_path / "line.mp3", 3.0)
     out, plan = build(tmp_path, {"segments": [
         {"file": str(a), "start": 0, "end": 2, "voice": str(voice), "voice_at": 0.8},
@@ -244,13 +258,19 @@ def test_reel_brings_the_voices_to_the_loudness_target(tmp_path, private_tmp, ta
 
 @needs_ffmpeg
 def test_reel_warns_when_one_gain_cannot_reach_the_loudness_target(tmp_path, private_tmp):
-    """A quiet line with one loud click: the gain to -16 LUFS would push the click past -1.5 dBTP."""
-    clip = make_clip(tmp_path / "a.mp4", 3)
+    """A quiet line with one loud click: the gain to -16 LUFS would push the click past -1.5 dBTP, so loudnorm
+    compresses. The track is 5.5 s long because loudnorm compresses over a 3 s window and misses badly on a shorter one."""
+    clip = make_clip(tmp_path / "a.mp4", 6)
     voice = tmp_path / "click.wav"
     subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i",
-                    "aevalsrc=0.03*sin(2*PI*440*t)+between(t\\,1\\,1.01)*0.9*sin(2*PI*440*t):s=24000:d=2", str(voice)], check=True)
-    _, plan = build(tmp_path, {"segments": [{"file": str(clip), "start": 0, "end": 3, "voice": str(voice), "voice_at": 0.5}]})
+                    "aevalsrc=0.03*sin(2*PI*440*t)+between(t\\,2\\,2.01)*0.9*sin(2*PI*440*t):s=24000:d=5", str(voice)], check=True)
+    out, plan = build(tmp_path, {"segments": [{"file": str(clip), "start": 0, "end": 6, "voice": str(voice), "voice_at": 0.5}]})
     assert any("cannot reach -16 LUFS by one gain" in w for w in plan["warnings"]), plan["warnings"]
+    level = loudness(out)
+    # the click reaches the ceiling, so the ceiling is pinned here: loudnorm keeps -1.5 dBTP, and the AAC encode after
+    # it may add a few tenths of a dB, hence the 0.3 dB margin
+    assert level["true_peak"] <= edit_demo.VOICE_TRUE_PEAK + 0.3
+    assert level["integrated"] == pytest.approx(-16, abs=1.5)
 
 
 @needs_ffmpeg
@@ -355,6 +375,99 @@ def test_a_bad_segment_stops_the_reel_before_anything_is_encoded(tmp_path, monke
             seg[k] = str(picture) if v == "IMG" else v
     message = _refused(tmp_path, monkeypatch, json.dumps({"segments": [seg]}))
     assert words in message and "segment 1" in message
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("window, words", [
+    ({"start": 0, "end": 3}, '"end" 3 s lies beyond the clip'),
+    ({"start": 1, "end": 1}, '"end" 1 s is not after "start" 1 s'),
+    ({"start": 1.5, "end": 0.5}, '"end" 0.5 s is not after "start" 1.5 s'),
+    ({"start": 2.5}, '"start" 2.5 s lies beyond the clip'),
+])
+def test_a_window_that_leaves_its_clip_or_is_empty_stops_the_reel(tmp_path, monkeypatch, window, words):
+    clip = make_clip(tmp_path / "a.mp4", 2)
+    voice = make_tone(tmp_path / "one.mp3", 0.5)
+    message = _refused(tmp_path, monkeypatch, json.dumps({"segments": [{"file": str(clip), "voice": str(voice), **window}]}))
+    assert words in message and "segment 1 (a.mp4)" in message
+
+
+@needs_ffmpeg
+def test_an_end_past_the_clip_cannot_make_two_voices_overlap(tmp_path, monkeypatch):
+    """A 2 s clip with "end": 3 and a 2.5 s voice, then a voiced clip: planned on 3 s but encoded as 2 s, the two voices
+    would overlap by 0.4 s. The window is refused before anything is encoded."""
+    a, b = make_clip(tmp_path / "a.mp4", 2), make_clip(tmp_path / "b.mp4", 2, "blue")
+    long_voice, short_voice = make_tone(tmp_path / "long.wav", 2.5), make_tone(tmp_path / "short.wav", 0.5)
+    message = _refused(tmp_path, monkeypatch, json.dumps({"segments": [
+        {"file": str(a), "start": 0, "end": 3, "voice": str(long_voice), "voice_at": 0},
+        {"file": str(b), "voice": str(short_voice), "voice_at": 0.1}]}))
+    assert 'segment 1 (a.mp4): "end" 3 s lies beyond the clip' in message
+
+
+@needs_ffmpeg
+def test_a_window_is_measured_inside_the_probed_clip(tmp_path):
+    """The schedule gets the window inside the clip's video: an end within one frame past it is the clip's end, and a
+    missing end is the video's length (the file's length is a few ms longer: the audio's last packet)."""
+    clip = make_clip(tmp_path / "a.mp4", 2)
+    assert edit_demo.probe_duration(clip) > 2.0
+    segs, _ = edit_demo._narrated_segments({"segments": [{"file": str(clip), "start": 0.5, "end": 2.02},
+                                                         {"file": str(clip)}]})
+    assert [s["seconds"] for s in segs] == pytest.approx([1.5, 2.0], abs=1e-3)
+
+
+def _without_holds(monkeypatch):
+    """A schedule with its holds taken away: the plan then lets voices overlap, which only the second net can catch."""
+    real = edit_demo.schedule
+    monkeypatch.setattr(edit_demo, "schedule", lambda segs, gap, tail: [{**p, "hold": 0.0} for p in real(segs, gap=gap, tail=tail)])
+
+
+@needs_ffmpeg
+def test_reel_stops_when_two_measured_voices_come_closer_than_the_gap(tmp_path, private_tmp, monkeypatch):
+    _without_holds(monkeypatch)
+    a, b = make_clip(tmp_path / "a.mp4", 2), make_clip(tmp_path / "b.mp4", 2, "blue")
+    one, two = make_tone(tmp_path / "one.wav", 2.5), make_tone(tmp_path / "two.wav", 0.5)
+    spec_path, out = tmp_path / "reel.json", tmp_path / "reel.mp4"
+    spec_path.write_text(json.dumps({"segments": [{"file": str(a), "voice": str(one), "voice_at": 0.3},
+                                                  {"file": str(b), "voice": str(two), "voice_at": 0.1}]}))
+    with pytest.raises(SystemExit) as stop:
+        edit_demo.build_reel(spec_path, out)
+    assert "segment 1 (a)" in str(stop.value) and "segment 2 (b)" in str(stop.value) and "gap" in str(stop.value)
+    assert not out.exists() and not out.with_suffix(".voice.json").exists()
+    assert list(private_tmp.iterdir()) == []
+
+
+@needs_ffmpeg
+def test_reel_stops_when_the_last_voice_would_end_after_the_reel(tmp_path, private_tmp, monkeypatch):
+    _without_holds(monkeypatch)
+    clip, voice = make_clip(tmp_path / "a.mp4", 2), make_tone(tmp_path / "one.wav", 3.0)
+    spec_path, out = tmp_path / "reel.json", tmp_path / "reel.mp4"
+    spec_path.write_text(json.dumps({"segments": [{"file": str(clip), "voice": str(voice), "voice_at": 0.3}]}))
+    with pytest.raises(SystemExit) as stop:
+        edit_demo.build_reel(spec_path, out)
+    assert "segment 1 (a)" in str(stop.value) and "after the reel's end" in str(stop.value)
+    assert not out.exists() and not out.with_suffix(".voice.json").exists()
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("bad", ["file", "image", "voice"])
+def test_a_file_that_is_not_media_stops_the_reel_with_one_line(tmp_path, monkeypatch, bad):
+    clip, voice = make_clip(tmp_path / "a.mp4", 2), make_tone(tmp_path / "one.mp3", 0.5)
+    junk = tmp_path / ("junk." + {"file": "mp4", "image": "png", "voice": "mp3"}[bad])
+    junk.write_text("not media")
+    seg = {"file": str(clip), "voice": str(voice)}
+    if bad == "image":
+        seg = {"image": str(junk), "seconds": 1, "voice": str(voice)}
+    else:
+        seg[bad] = str(junk)
+    message = _refused(tmp_path, monkeypatch, json.dumps({"segments": [seg]}))
+    assert "segment 1" in message and "cannot read" in message and junk.name in message
+
+
+@needs_ffmpeg
+def test_a_failed_loudness_measurement_stops_with_one_line(tmp_path):
+    junk = tmp_path / "voices.wav"
+    junk.write_text("not audio")
+    with pytest.raises(SystemExit, match="measuring the loudness of the voice track failed"):
+        edit_demo._loudness_filter(junk, -16)
 
 
 @needs_ffmpeg
