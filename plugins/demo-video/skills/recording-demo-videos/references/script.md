@@ -53,6 +53,21 @@ Rules for every beat, title, subtitle and card row:
 - Give a caption `dur` when the next action must start clean (an exit, a new command); the default runs up to 7 s and would hang over the next screen.
 - `"pos": "top"` when the lower third would sit on the evidence (a bottom table, a status bar).
 
+### Pointing: boxes and a held caption
+
+A beat can point at what its sentence is about. The frame stays untouched; a red border is drawn over it while the caption shows.
+
+| Field | Meaning |
+|---|---|
+| `"box"` | `[x, y, w, h]` in frame pixels, a list of such rectangles, or `"shot:<key>[#n]"` / `"mark:<key>[#n]"` (the rectangle the recorder logged for that shot or `rec.mark`) |
+| `"box_delay"` | seconds after the caption starts; default `1.4 / speed + 0.2` on a `shot:` anchor (the box waits for the camera to stop), else 0 |
+| `"box_dur"` | seconds of the finished clip the box shows, from its start; without it the box shows until its caption ends |
+| `"hold": true` | on the last beat only: the caption and its boxes stay to the clip's last frame, with no fade-out |
+
+A box may not lie under the caption, and may not show while the camera moves to a new shot: the clip step stops with a message that names the fix. A held caption stays to the end of the clip, so on a clip whose camera moves on, give the box a `box_dur` that ends before the move. One caption has one time for its boxes: to point at two things one after the other, write two beats. Rules, refusals and a worked `box_dur` are in [voice-and-highlight.md](voice-and-highlight.md).
+
+A beat that is narrated is written for the ear as well: the narration line (one per beat or per card, see [voice-and-highlight.md](voice-and-highlight.md)) says only what the frames show while it plays, and the caption stays as it is.
+
 4–15 beats per clip at 1× is a normal density; a short sped-up piece may carry a single beat. Format and anchor forms: `python3 scripts/edit_demo.py --help`.
 
 ## 4. Summary card (8–10 s): take home messages

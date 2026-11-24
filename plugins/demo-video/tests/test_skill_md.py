@@ -114,3 +114,52 @@ def test_terminal_helpers_ship_and_reel_is_single_pass():
     code = (SKILL / "scripts" / "edit_demo.py").read_text()
     assert "REEL_ENCODE" in code and '"--copy"' in code, "reel must re-encode by default and keep --copy for the old join"
     assert "lang=ko" in code and "lang=ko" in (SKILL / "scripts" / "make_cards.py").read_text(), "font fallback must ask fontconfig for Korean"
+
+
+REFERENCE_MD = SKILL / "references" / "voice-and-highlight.md"
+MANIFEST_MD = SKILL / "references" / "reel-manifest.md"
+README_MD = PLUGIN / "README.md"
+
+
+def test_skill_points_to_the_voice_and_highlight_reference():
+    """Boxes, held captions, narration and the checks: SKILL.md is short and sends the reader to one reference."""
+    text = SKILL_MD.read_text()
+    assert "](references/voice-and-highlight.md)" in text
+    assert REFERENCE_MD.exists()
+    ref = REFERENCE_MD.read_text()
+    for must in ("box", "hold", "voice", "image", "group", "check_demo.py audit", "boxes", "sheet",
+                 "box_dur", "box_delay", "voice_at", "voice_gap", "voice_tail", "loudness", "mark:", "rec.mark", "markRows",
+                 "polly:SynthesizeSpeech", "--readings", "--hangul-only", "review.html", "cannot hear"):
+        assert must in ref, f"voice-and-highlight.md does not mention {must!r}"
+    for row in ("rec.mark", "\"hold\": true", "edit_demo.py voice"):
+        assert row in text, f"SKILL.md has no quick-reference row for {row!r}"
+    for name in ("Bedrock", "AgentCore", "hosting hub", "Hosting Hub", "agent-hosting"):
+        assert name not in ref and name not in text, f"project name {name!r} in a skill document"
+
+
+def test_the_reference_documents_name_the_new_fields():
+    """script.md carries the beat fields, reel-manifest.md the segment and top-level fields."""
+    script = SCRIPT_MD.read_text()
+    for must in ("box", "box_delay", "box_dur", "hold"):
+        assert f"`\"{must}\"" in script or f"`{must}`" in script, f"script.md does not document {must!r}"
+    manifest = MANIFEST_MD.read_text()
+    for must in ("image", "seconds", "voice", "voice_at", "group", "voice_gap", "voice_tail", "loudness", ".voice.json", "--copy"):
+        assert must in manifest, f"reel-manifest.md does not document {must!r}"
+
+
+def test_the_description_names_the_new_features_in_all_four_places():
+    """plugin.json, the marketplace entry, the README and the SKILL.md frontmatter change together."""
+    plugin = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text())["description"]
+    market = json.loads((PLUGIN.parents[1] / ".claude-plugin" / "marketplace.json").read_text())
+    entry = next(p for p in market["plugins"] if p["name"] == "demo-video")["description"]
+    places = {"plugin.json": plugin, "marketplace.json": entry, "SKILL.md": frontmatter(), "README.md": README_MD.read_text()}
+    for where, text in places.items():
+        low = text.lower()
+        assert "highlight box" in low or "강조 상자" in text, f"{where} does not name the highlight boxes"
+        assert "narrat" in low or "내레이션" in text, f"{where} does not name the narrated reels"
+
+
+def test_the_readme_states_the_one_new_requirement_and_the_origin():
+    readme = README_MD.read_text()
+    assert "polly:SynthesizeSpeech" in readme, "the only new requirement: the AWS CLI, for synthesis only"
+    assert "2026-11-24" in readme and "check_demo.py" in readme
