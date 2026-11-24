@@ -63,21 +63,23 @@ export async function waitFor(page, needle, timeoutMs = 60000) {
 /** Claude Code's input prompt (❯). */
 export const waitPrompt = (page, timeoutMs = 90000) => waitFor(page, '❯', timeoutMs);
 
-/** Rows containing the needles (first..last) as a page rectangle, in untransformed page coordinates. */
-export async function rowsRect(page, firstNeedle, lastNeedle) {
-  return page.evaluate(([a, b]) => {
-    const rows = [...document.querySelectorAll('.xterm-rows > div')];
-    const i = rows.findIndex(r => r.textContent.includes(a));
-    let j = rows.length - 1;
-    for (let k = rows.length - 1; k >= 0; k--) if (rows[k].textContent.includes(b)) { j = k; break; }
-    if (i < 0) return null;
-    const m = new DOMMatrix(getComputedStyle(document.body).transform).inverse();
-    const un = (x, y) => { const p = m.transformPoint(new DOMPoint(x + window.scrollX, y + window.scrollY)); return [p.x, p.y]; };
-    const ra = rows[i].getBoundingClientRect(), rb = rows[Math.max(i, j)].getBoundingClientRect();
-    const [x0, y0] = un(ra.left, ra.top), [x1, y1] = un(ra.right, rb.bottom);
-    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
-  }, [firstNeedle, lastNeedle]);
-}
+// The rows containing the needles (first..last), through the camera's own mapping: 'aim' gives them in the camera's
+// untransformed page coordinates, 'frame' gives { rect } where the frame shows them. Measured and mapped in one page
+// call, so a camera move under way cannot come between the two. null when the first needle is not on screen.
+const measureRows = (page, firstNeedle, lastNeedle, how) => page.evaluate(([a, b, how]) => {
+  const rows = [...document.querySelectorAll('.xterm-rows > div')];
+  const i = rows.findIndex(r => r.textContent.includes(a));
+  let j = rows.length - 1;
+  for (let k = rows.length - 1; k >= 0; k--) if (rows[k].textContent.includes(b)) { j = k; break; }
+  if (i < 0) return null;
+  const ra = rows[i].getBoundingClientRect(), rb = rows[Math.max(i, j)].getBoundingClientRect();
+  const client = { left: ra.left, top: ra.top, right: ra.right, bottom: rb.bottom };
+  return how === 'frame' ? { rect: window.__cam.frameRect(window.__cam.fromClient(client, true)) } : window.__cam.fromClient(client);
+}, [firstNeedle, lastNeedle, how]);
+
+/** Rows containing the needles (first..last) as a page rectangle, in the camera's untransformed page coordinates (as
+ *  window.__cam.rect gives an element's: layout px under --layout). Needs the camera (rec.install()). */
+export async function rowsRect(page, firstNeedle, lastNeedle) { return measureRows(page, firstNeedle, lastNeedle, 'aim'); }
 
 /** Zoom the camera onto the rows between two needles; falls back to a wide shot when the text is not on screen. */
 export async function zoomRows(rec, page, key, firstNeedle, lastNeedle, opts = {}, label) {
@@ -90,7 +92,7 @@ export async function zoomRows(rec, page, key, firstNeedle, lastNeedle, opts = {
 /** Say where the rows between two needles are on the frame, moving nothing (rec.mark for terminal rows): a "mark"
  *  entry with "rect" in the camlog. The text not on screen → missing: true, a warning, and null. */
 export async function markRows(rec, page, key, firstNeedle, lastNeedle, label) {
-  const r = await rowsRect(page, firstNeedle, lastNeedle);
-  if (!r) return rec.markRect(key, null, label, `${firstNeedle} not on screen`);
-  return rec.markRect(key, (await page.evaluate(r => window.__cam.frameRect(r), r)) ?? undefined, label);   // off the frame: no rect
+  const found = await measureRows(page, firstNeedle, lastNeedle, 'frame');
+  if (!found) return rec.markRect(key, null, label, `${firstNeedle} not on screen`);
+  return rec.markRect(key, found.rect ?? undefined, label);   // off the frame: no rect
 }

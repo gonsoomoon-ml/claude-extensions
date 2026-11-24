@@ -127,8 +127,8 @@ def drawtext(textfile: Path, *, font: str, size: int, x: str, y: str, start: flo
 
 
 def script_time(at, log: list[dict]) -> float:
-    """Resolve a beat anchor to raw seconds. Forms: number | 'shot:<key>[#n]' | 'caption:<substring>[#n]' |
-    'note:<kind>[#n]' | '<kind>[#n]' (any camlog kind, e.g. 'scene_end', 'play')."""
+    """Resolve a beat anchor to raw seconds. Forms: number | 'shot:<key>[#n]' | 'mark:<key>[#n]' |
+    'caption:<substring>[#n]' | 'note:<kind>[#n]' | '<kind>[#n]' (any camlog kind, e.g. 'scene_end', 'play')."""
     if isinstance(at, (int, float)):
         return float(at)
     spec, _, nth = str(at).partition("#")
@@ -136,8 +136,8 @@ def script_time(at, log: list[dict]) -> float:
     kind, _, arg = spec.partition(":")
     if kind == "note":
         kind, arg = arg, ""
-    if kind == "shot":
-        hits = [e for e in log if e["kind"] == "shot" and e.get("key") == arg]
+    if kind in ("shot", "mark"):
+        hits = [e for e in log if e["kind"] == kind and e.get("key") == arg]
     elif kind == "caption":
         hits = [e for e in log if e["kind"] == "caption" and arg in e.get("text", "")]
     else:

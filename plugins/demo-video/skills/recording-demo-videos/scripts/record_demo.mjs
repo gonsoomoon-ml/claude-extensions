@@ -60,17 +60,34 @@ const CAMERA_JS = `
   const Z = ${Z}, W = ${W} / Z, H = ${H} / Z;
   if (Z !== 1) document.documentElement.style.zoom = String(Z);
   const state = { x: 0, y: 0, k: 1 };
-  let target = null;  // untransformed rect of the last focus/region: what the shot points at
+  let target = null;  // the last focus/region: where its target truly lies on the page (rect) and the body's box (o)
   const pageSize = () => ({ w: Math.max(document.body.offsetWidth, W), h: Math.max(document.body.offsetTop + document.body.offsetHeight, H) });
-  // Element rect in untransformed page coordinates: invert the current body transform and fold in scroll,
-  // otherwise the second shot measures a rect that is already scaled by the first.
-  const untransformed = el => {
-    const r = el.getBoundingClientRect(), sx = window.scrollX / Z, sy = window.scrollY / Z;
-    const m = new DOMMatrix(getComputedStyle(document.body).transform).inverse();
-    const a = m.transformPoint(new DOMPoint(r.left / Z + sx, r.top / Z + sy)), b = m.transformPoint(new DOMPoint(r.right / Z + sx, r.bottom / Z + sy));
-    return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
+  // A measured place in 1/64 px, the layout's own unit: client rects come in float32 and pass through the inverted
+  // transform, and that noise would decide which way an edge that maps to a whole pixel is rounded.
+  const lu = v => Math.round(v * 64) / 64;
+  // The body transform turns around the body's own box (transform-origin 0 0), which an unstyled page puts 8 px in
+  // from the page's corner. The camera aims in a model that takes that box for the corner (kept, so takes frame as
+  // they always have); where a rectangle truly lies is worked out around the box itself. Its place: the box's corner
+  // as the browser shows it under the transform matrix t, less t's translation (body.offsetLeft/Top are 0 for the body).
+  const origin = (t = new DOMMatrix(getComputedStyle(document.body).transform)) => {
+    const b = document.body.getBoundingClientRect();
+    return { x: lu((b.left + window.scrollX) / Z - t.e), y: lu((b.top + window.scrollY) / Z - t.f) };
   };
+  // A client rect (visual px, as getBoundingClientRect gives it) in untransformed page coordinates: invert the current
+  // body transform and fold in scroll, otherwise the second shot measures a rect that is already scaled by the first.
+  // In the camera's model (what it aims with, as measured); onPage: where the rectangle truly lies on the page.
+  const fromClient = (r, onPage = false) => {
+    const sx = window.scrollX / Z, sy = window.scrollY / Z, t = new DOMMatrix(getComputedStyle(document.body).transform);
+    const m = t.inverse(), o = onPage ? origin(t) : { x: 0, y: 0 };
+    const un = (px, py) => { const p = m.transformPoint(new DOMPoint(px / Z + sx - o.x, py / Z + sy - o.y)); return [p.x + o.x, p.y + o.y]; };
+    let [x0, y0] = un(r.left, r.top), [x1, y1] = un(r.right, r.bottom);
+    if (onPage) [x0, y0, x1, y1] = [x0, y0, x1, y1].map(lu);
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  };
+  const untransformed = el => fromClient(el.getBoundingClientRect());
+  const onPage = el => fromClient(el.getBoundingClientRect(), true);
   const apply = (x, y, k, dur) => {
+    target = null;  // a move of its own points at nothing; fitRect names its target once the move is made
     const page = pageSize();
     if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
     k = Math.max(1, Math.min(k, 2.6));
@@ -81,22 +98,27 @@ const CAMERA_JS = `
     Object.assign(state, { x, y, k });
     return { x, y, k };
   };
-  // A rectangle in untransformed page coordinates as the frame shows it with the camera at its current state (the
-  // position a move in progress is heading to): scale(k) translate(-x,-y), then the layout zoom Z; integers (edges
-  // rounded outwards), clipped to the frame; null when nothing of it lies on the frame.
-  const frameRect = r => {
+  // A page rectangle (fromClient onPage, or a region's numbers) as the frame shows it with the camera at its current
+  // state (the position a move in progress is heading to): scale(k) translate(-x,-y) around the body's box o, then
+  // the layout zoom Z; integers (edges rounded outwards), clipped to the frame; null when nothing of it lies on it.
+  const frameRect = (r, o = origin()) => {
     const s = Z * state.k;
-    const x0 = Math.max(0, Math.floor(s * (r.x - state.x))), y0 = Math.max(0, Math.floor(s * (r.y - state.y)));
-    const x1 = Math.min(W * Z, Math.ceil(s * (r.x + r.w - state.x))), y1 = Math.min(H * Z, Math.ceil(s * (r.y + r.h - state.y)));
+    const fx = v => Z * o.x + s * (v - o.x - state.x), fy = v => Z * o.y + s * (v - o.y - state.y);
+    const x0 = Math.max(0, Math.floor(fx(r.x))), y0 = Math.max(0, Math.floor(fy(r.y)));
+    const x1 = Math.min(W * Z, Math.ceil(fx(r.x + r.w))), y1 = Math.min(H * Z, Math.ceil(fy(r.y + r.h)));
     return x1 > x0 && y1 > y0 ? [x0, y0, x1 - x0, y1 - y0] : null;
   };
-  const fitRect = (r, opts = {}) => {
-    target = r;
+  // r frames the camera (its model); page is where the target truly lies, for the shot's rect. The body's box is read
+  // before the move (apply reads the layout there too): a read after it would start the camera's transition early.
+  const fitRect = (r, opts = {}, page = r) => {
+    const o = origin();
     const pad = opts.pad ?? 24, kmax = opts.kmax ?? 2.2;
     let k = Math.min(W / (r.w + 2 * pad), H / (r.h + 2 * pad), kmax);
     k = Math.max(1, k);
     const cx = r.x + r.w / 2, cy = (opts.anchorTop ? r.y + H / k / 2 - pad : r.y + r.h / 2);
-    return apply(cx - W / k / 2, cy - H / k / 2, k, opts.dur);
+    const to = apply(cx - W / k / 2, cy - H / k / 2, k, opts.dur);
+    target = { rect: page, o };
+    return to;
   };
   const focus = (selector, opts = {}) => {
     const els = typeof selector === 'string' ? [...document.querySelectorAll(selector)] : [selector];
@@ -104,19 +126,19 @@ const CAMERA_JS = `
     if (!el) return null;
     const r = untransformed(el);
     if (r.w < 2 || r.h < 2) return null;
-    return fitRect(r, opts);
+    return fitRect(r, opts, onPage(el));
   };
   const region = (x, y, w, h, opts = {}) => fitRect({ x, y, w, h }, opts);
-  const reset = dur => { target = null; return apply(0, 0, 1, dur); };
-  const targetRect = () => (target ? frameRect(target) : null);
+  const reset = dur => apply(0, 0, 1, dur);
+  const targetRect = () => (target ? frameRect(target.rect, target.o) : null);   // reads nothing of the page
   // The element's rect for a mark: { found: false } when nothing matches (or it has no size), else { rect }.
   const mark = (selector, index = 0) => {
     const el = document.querySelectorAll(selector)[index];
-    const r = el && untransformed(el);
+    const r = el && onPage(el);
     return !r || r.w < 2 || r.h < 2 ? { found: false } : { found: true, rect: frameRect(r) };
   };
   const rect = selector => { const el = document.querySelector(selector); return el ? untransformed(el) : null; };
-  window.__cam = { focus, region, reset, rect, apply, state, pageSize, frameRect, targetRect, mark };
+  window.__cam = { focus, region, reset, rect, apply, state, pageSize, frameRect, targetRect, mark, fromClient };
 })();`;
 
 // Playwright's click()/fill() scroll the target into view, which fights the camera transform. Dispatch instead.
@@ -125,16 +147,16 @@ const tap = async locator => { await locator.first().waitFor({ state: 'visible' 
 class Recorder {
   constructor(page, name) { this.page = page; this.name = name; this.log = []; this.t0 = Date.now(); this.lastShot = 0; this.lastKey = ''; }
   now() { return (Date.now() - this.t0) / 1000; }
-  note(kind, data = {}) { this.log.push({ t: +this.now().toFixed(2), kind, ...data }); }
+  note(kind, data = {}, t = this.now()) { this.log.push({ t: +t.toFixed(2), kind, ...data }); }
   async install() { await this.page.evaluate(CAMERA_JS); }
   async shot(key, fn, label) {
     const result = await this.page.evaluate(fn).catch(error => ({ error: String(error) }));
-    this.lastShot = this.now(); this.lastKey = key;
+    const t = this.lastShot = this.now(); this.lastKey = key;
     // null = selector matched nothing (or a 0-size element): the camera did not move. Say so loudly; a silent
     // no-op here means a whole take with the wrong framing.
     const missing = result === null;
     const rect = result && result.k !== undefined ? await this.page.evaluate('window.__cam.targetRect()').catch(() => null) : null;
-    this.note('shot', { key, label, camera: result, ...(rect ? { rect } : {}), ...(missing ? { missing: true } : {}) });
+    this.note('shot', { key, label, camera: result, ...(rect ? { rect } : {}), ...(missing ? { missing: true } : {}) }, t);
     if (missing) console.warn(`[${this.now().toFixed(1)}s] shot ${key}: selector matched nothing, camera unchanged`);
     else console.log(`[${this.now().toFixed(1)}s] shot ${key}${label ? ' — ' + label : ''}`);
     return result;
@@ -144,15 +166,19 @@ class Recorder {
   /** Zoom to fit a page-coordinate rectangle. */
   async region(key, x, y, w, h, opts = {}, label) { return this.shot(key, `window.__cam.region(${x},${y},${w},${h},${JSON.stringify(opts)})`, label); }
   /** Say where an element is on the frame as the camera shows it (or will: a move under way counts as made), moving
-   *  nothing. Writes a "mark" entry with "rect"; no match → missing: true, a warning, and null. */
+   *  nothing. Writes a "mark" entry with "rect"; no match → missing: true, a warning, and null (a selector that is not
+   *  CSS: the same, with the browser's error in the entry's "error" and in the warning). */
   async mark(key, selector, label, index = 0) {
-    const found = await this.page.evaluate(`window.__cam.mark(${JSON.stringify(selector)}, ${index})`).catch(error => ({ error: String(error) }));
-    return this.markRect(key, found && found.found ? found.rect ?? undefined : null, label, `selector ${selector} matched nothing`);
+    const found = await this.page.evaluate(`window.__cam.mark(${JSON.stringify(selector)}, ${index})`)
+      .catch(error => ({ error: String(error).split('\n')[0] }));
+    if (found?.error) return this.markRect(key, null, label, `selector ${selector}: ${found.error}`, found.error);
+    return this.markRect(key, found?.found ? found.rect ?? undefined : null, label, `selector ${selector} matched nothing`);
   }
-  /** The same for a rectangle in untransformed page coordinates (term.mjs markRows). rect null: nothing to mark. */
-  async markRect(key, rect, label, whyMissing = 'nothing to mark') {
+  /** The same for a rectangle already in frame pixels (term.mjs markRows). rect null: nothing to mark; error: the
+   *  browser's words, kept in the entry. */
+  async markRect(key, rect, label, whyMissing = 'nothing to mark', error) {
     const missing = rect === null;
-    this.note('mark', { key, label, ...(rect ? { rect } : {}), ...(missing ? { missing: true } : {}) });
+    this.note('mark', { key, label, ...(rect ? { rect } : {}), ...(missing ? { missing: true } : {}), ...(error ? { error } : {}) });
     if (missing) console.warn(`[${this.now().toFixed(1)}s] mark ${key}: ${whyMissing}`);
     else console.log(`[${this.now().toFixed(1)}s] mark ${key}${label ? ' — ' + label : ''}`);
     return missing ? null : rect;

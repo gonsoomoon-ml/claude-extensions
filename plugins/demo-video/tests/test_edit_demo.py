@@ -37,6 +37,18 @@ def test_anchor_forms_resolve_to_camlog_seconds():
     assert edit_demo.script_time("play", LOG) == 4.5
 
 
+def test_a_mark_anchor_finds_the_mark_with_its_key():
+    log = LOG + [{"t": 9.0, "kind": "mark", "key": "wide", "rect": [0, 0, 10, 10]},
+                 {"t": 10.5, "kind": "mark", "key": "after", "rect": [5, 5, 10, 10]},
+                 {"t": 12.0, "kind": "mark", "key": "after", "rect": [5, 5, 10, 10]}]
+    assert edit_demo.script_time("mark:after", log) == 10.5
+    assert edit_demo.script_time("mark:after#2", log) == 12.0
+    assert edit_demo.script_time("mark:wide", log) == 9.0
+    with pytest.raises(SystemExit, match="mark:gone"):
+        edit_demo.script_time("mark:gone", log)
+    assert edit_demo.script_time("note:play", log) == 4.5 and edit_demo.script_time("play", log) == 4.5
+
+
 def test_missing_anchor_aborts_with_its_name():
     with pytest.raises(SystemExit, match="shot:table"):
         edit_demo.script_time("shot:table", LOG)

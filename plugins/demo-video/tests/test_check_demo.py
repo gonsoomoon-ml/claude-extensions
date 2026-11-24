@@ -354,19 +354,26 @@ def test_audit_names_a_voice_file_changed_since_the_reel_was_built(tmp_path, ton
     """A file of another length than the plan says is held against the plan's times, with a warning, instead of being
     trusted to say where its sound is."""
     reel, _ = tone_reel
-    moved = with_sound_moved(reel, -0.35, tmp_path / "moved.mp4")   # the reel's sound ends early by more than the tolerance
+    intact = cli("audit", reel, "--plan", reel.with_suffix(".voice.json"), "--out", tmp_path / "ok.json")
+    ok = json.loads((tmp_path / "ok.json").read_text())
+    assert intact.returncode == 0 and not ok["warnings"]
+    # only voice 2's sound is damaged: its last 0.35 s (more than the tolerance) is silenced in the reel
+    end = ok["voices"][1]["heard"][1]
+    cut = tmp_path / "cut.mp4"
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(reel), "-af", f"volume=0:enable='between(t,{end - 0.35:.3f},{end + 0.1:.3f})'",
+                    "-c:v", "copy", "-c:a", "aac", "-b:a", "96k", str(cut)], check=True)
     plan = json.loads(reel.with_suffix(".voice.json").read_text())
     swapped = plan["voices"][1]["end"] - plan["voices"][1]["start"] - 0.35
     plan["voices"][1]["file"] = str(make_tone(tmp_path / "two.mp3", swapped, 660))   # a file that now matches the damaged reel
     (tmp_path / "plan.json").write_text(json.dumps(plan))
-    done = cli("audit", moved, "--plan", tmp_path / "plan.json", "--out", tmp_path / "audit.json")
+    done = cli("audit", cut, "--plan", tmp_path / "plan.json", "--out", tmp_path / "audit.json")
     report = json.loads((tmp_path / "audit.json").read_text())
-    assert done.returncode == 1, "the plan's times show the shift the swapped file would hide"
+    assert done.returncode == 1, "the plan's times show the cut the swapped file would hide"
+    (problem,) = report["problems"]
+    assert problem.startswith("voice 2 (") and "end -" in problem, problem
     (warning,) = [w for w in report["warnings"] if "changed since the reel was built" in w]
     assert "voice 2" in warning and "two.mp3" in warning
     assert report["voices"][1]["file_sound"] is None and report["voices"][1]["expected"] == report["voices"][1]["planned"]
-    intact = cli("audit", reel, "--plan", reel.with_suffix(".voice.json"), "--out", tmp_path / "ok.json")
-    assert intact.returncode == 0 and not json.loads((tmp_path / "ok.json").read_text())["warnings"]
 
 
 @needs_ffmpeg
