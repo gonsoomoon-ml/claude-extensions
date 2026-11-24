@@ -14,6 +14,10 @@ which describe where the camera looks, not what the viewer should understand.
 `reel` concatenates trimmed windows from several finished clips and re-encodes the join into ONE H.264 stream
 (1.3.0: a stream-copied concat carried a two-entry edit list that made QuickTime freeze mid-video; `--copy` keeps
 the old behaviour). Default output: High 4.1, CRF 23, 3 Mbit/s cap, keyframe every 2 s, faststart, one file.
+A reel segment may carry a narration (1.4.0): "voice": <audio file>, "voice_at": <seconds into the segment>, "group";
+a segment may also be a picture, {"image": <png>, "seconds": <n>}. The reel then holds a segment's last frame until
+its voice has ended (see schedule), mixes the voices into one track at -16 LUFS ("loudness") and writes
+<out stem>.voice.json with the measured times. A manifest with no "voice" and no "image" runs as before.
 Nothing about the recorded UI is altered; only overlays are added. Temp files are removed when each command ends.
 
 Look (fixed here so every clip of a set matches; change the constants, re-run every clip):
@@ -53,6 +57,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import shlex
@@ -320,8 +325,15 @@ REEL_ENCODE = ["-c:v", "libx264", "-preset", "medium", "-crf", "23", "-maxrate",
 
 def build_reel(spec: Path, out: Path, copy: bool = False) -> None:
     """spec: {"segments": [{"file": "...mp4", "start": 0, "end": 25, "fade_in": 0}, ...], "fade": 0.4}
-    copy=True keeps the 1.2.0 behaviour (stream-copy concat, two-entry edit list) instead of the final re-encode."""
+    copy=True keeps the 1.2.0 behaviour (stream-copy concat, two-entry edit list) instead of the final re-encode.
+    A manifest with a "voice" or an "image" on any segment is a narrated reel (build_narrated_reel); the rest of this
+    function is the 1.3.0 reel, unchanged."""
     cfg = json.loads(spec.read_text())
+    if any("voice" in seg or "image" in seg for seg in cfg["segments"]):
+        if copy:
+            raise SystemExit("reel: --copy cannot carry voices or picture segments; leave it out")
+        build_narrated_reel(spec, out)
+        return
     fade = float(cfg.get("fade", 0.4))
     # concat with stream copy needs identical streams; a mixed-size reel fails late with a cryptic error, so check first
     sizes = {seg["file"]: probe_size(Path(seg["file"])) for seg in cfg["segments"]}
@@ -352,6 +364,257 @@ def build_reel(spec: Path, out: Path, copy: bool = False) -> None:
             run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy", str(joined)])
             run(["ffmpeg", "-y", "-v", "error", "-i", str(joined), *REEL_ENCODE, "-movflags", "+faststart", str(out)])
     print(json.dumps({"out": str(out), "seconds": round(probe_duration(out), 1), "parts": len(parts)}))
+
+# ---------------------------------------------------------------- narrated reel (voices, held frames, picture segments)
+
+VOICE_GAP = 0.6          # seconds of silence at least between two voices (manifest "voice_gap")
+VOICE_TAIL = 1.0         # seconds the reel runs on after the last voice (manifest "voice_tail")
+VOICE_LOUDNESS = -16.0   # integrated loudness of the voice track, LUFS (manifest "loudness")
+VOICE_TRUE_PEAK = -1.5   # dBTP
+VOICE_RATE = 48000
+# ffmpeg 4.4's loudnorm applies one gain only when the track's loudness range fits its target range; with a narrower
+# target it compresses instead, which changes the voices' levels against each other and can miss the target by over 1 LU
+LOUDNORM_LRA = 20        # the widest range ffmpeg 4.4 accepts
+WARN_HOLD, WARN_HOLD_SHARE, WARN_VOICE = 6.0, 0.30, 14.0   # reported in <out>.voice.json, not fatal
+
+
+def schedule(segments: list[dict], gap: float = VOICE_GAP, tail: float = VOICE_TAIL) -> list[dict]:
+    """How long each segment's last frame is held so that voices never overlap and the screen never runs ahead of a voice.
+
+    In, per segment: "seconds"; for a voiced one "voice_seconds" and "voice_at" (seconds into the segment, default 0);
+    optional "group". Out, per segment: "hold" and "start" (in the reel, holds counted); "voice_start" and "voice_end"
+    for a voiced one. A voice may run on over the following segments that share its non-empty group (and so have no
+    voice: they end at the next voiced segment). For each voiced segment a, in order, with b the next voiced segment
+    and c the last segment of a's run-on range (a itself when the range is empty):
+      1. if the voice ends after c ends, c is held by the difference;
+      2. if b's voice would start less than `gap` after this voice ends, the segment just before b is held by the
+         missing time;
+      3. after the last voice the reel runs at least `tail` longer: its last segment is held by the missing time.
+    Every start is counted with the holds already given.
+    """
+    n = len(segments)
+    hold = [0.0] * n
+    voiced = [i for i, s in enumerate(segments) if "voice_seconds" in s]
+
+    def start(i: int) -> float:
+        return sum(float(segments[j]["seconds"]) + hold[j] for j in range(i))
+
+    def voice(i: int) -> tuple[float, float]:
+        t0 = start(i) + float(segments[i].get("voice_at", 0))
+        return t0, t0 + float(segments[i]["voice_seconds"])
+
+    for k, a in enumerate(voiced):
+        b = voiced[k + 1] if k + 1 < len(voiced) else None
+        group, c = segments[a].get("group"), a
+        while group not in (None, "") and c + 1 < (n if b is None else b) and segments[c + 1].get("group") == group:
+            c += 1
+        _, end = voice(a)
+        c_end = start(c + 1)
+        if end > c_end:
+            hold[c] += end - c_end
+        if b is not None:
+            next_start, _ = voice(b)
+            if next_start < end + gap:
+                hold[b - 1] += end + gap - next_start
+        elif start(n) < end + tail:
+            hold[n - 1] += end + tail - start(n)
+    plan = []
+    for i in range(n):
+        p = {"hold": hold[i], "start": start(i)}
+        if i in voiced:
+            p["voice_start"], p["voice_end"] = voice(i)
+        plan.append(p)
+    return plan
+
+
+def _manifest_object(pairs: list) -> dict:
+    """json object hook: a "voice" given twice in one segment keeps both values (as a list, which the checks refuse);
+    plain json.loads would keep the last one without a word."""
+    obj = {}
+    for key, value in pairs:
+        if key == "voice" and key in obj:
+            obj[key] = (obj[key] if isinstance(obj[key], list) else [obj[key]]) + [value]
+        else:
+            obj[key] = value
+    return obj
+
+
+def _number(value) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _narrated_segments(cfg: dict) -> tuple[list[dict], tuple[int, int]]:
+    """Every segment of a narrated reel, checked and measured (clip windows, voice lengths) before anything is encoded,
+    and the reel's frame size (the clips' size; W x H when there are only pictures, which are scaled to fit it)."""
+    fade = float(cfg.get("fade", 0.4))
+    problems, segs = [], []
+    for n, seg in enumerate(cfg["segments"], 1):
+        if ("file" in seg) == ("image" in seg):
+            problems.append(f'segment {n}: has both "file" and "image" (give one, not both)' if "file" in seg
+                            else f'segment {n}: has neither "file" nor "image"')
+            continue
+        is_image = "image" in seg
+        src = Path(str(seg["image"] if is_image else seg["file"]))
+        label = f"segment {n} ({src.name})"
+        if not src.is_file():
+            problems.append(f"{label}: file not found: {src}")
+            continue
+        if is_image:
+            start, seconds = 0.0, _number(seg.get("seconds"))
+            if seconds is None or seconds <= 0:
+                problems.append(f'{label}: an "image" needs "seconds" (a number above 0)')
+                continue
+        else:
+            start = float(seg.get("start", 0))
+            seconds = float(seg.get("end") or probe_duration(src)) - start
+        item = {"name": src.stem, "src": src, "image": is_image, "start": start, "seconds": seconds,
+                "fade_in": float(seg.get("fade_in", fade)), "fade_out": float(seg.get("fade_out", fade)),
+                "group": seg.get("group")}
+        if seg.get("voice") is not None:
+            if not isinstance(seg["voice"], str):
+                problems.append(f'{label}: one voice per segment ("voice" holds {len(seg["voice"])} values)'
+                                if isinstance(seg["voice"], list) else f'{label}: "voice" is not a file name')
+                continue
+            voice = Path(seg["voice"])
+            if not voice.is_file():
+                problems.append(f"{label}: voice file not found: {voice}")
+                continue
+            at = _number(seg.get("voice_at", 0))
+            if at is None or not 0 <= at <= seconds:
+                problems.append(f'{label}: "voice_at" {seg.get("voice_at")!r} lies outside the segment (0 to {seconds:.2f} s)')
+                continue
+            item.update(voice=voice, voice_at=at, voice_seconds=probe_duration(voice))
+        segs.append(item)
+    if problems:
+        raise SystemExit("reel: refused before encoding:\n  " + "\n  ".join(problems))
+    sizes = {str(s["src"]): probe_size(s["src"]) for s in segs if not s["image"]}
+    if len(set(sizes.values())) > 1:
+        raise SystemExit("reel segments differ in resolution: " + ", ".join(f"{f} {s}" for f, s in sizes.items()))
+    size = next(iter(sizes.values()), f"{W}x{H}")
+    return segs, tuple(int(v) for v in size.split("x"))
+
+
+def _encode_narrated_part(seg: dict, hold: float, size: tuple[int, int], part: Path) -> None:
+    """One part of a narrated reel, video only: a clip window with its last frame held, or a picture drawn for its
+    whole length; then the segment's fades (the hold comes before the fade-out)."""
+    w, h = size
+    total = seg["seconds"] + hold
+    fi, fo = seg["fade_in"], seg["fade_out"]
+    fades = [f"fade=t=in:st=0:d={fi}"] * (fi > 0) + [f"fade=t=out:st={max(0, total - fo):.3f}:d={fo}"] * (fo > 0)
+    if seg["image"]:
+        # drawn, never frozen: a card clip fades to black at its own end, so holding its last frame shows black
+        src = ["-loop", "1", "-framerate", str(FPS), "-i", str(seg["src"])]
+        vf = [f"scale={w}:{h}:force_original_aspect_ratio=decrease", f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2",
+              "setsar=1", f"fps={FPS}", "format=yuv420p"]
+        length = ["-frames:v", str(math.ceil(total * FPS - 1e-6))]
+    else:
+        src = ["-ss", f"{seg['start']:.3f}", "-to", f"{seg['start'] + seg['seconds']:.3f}", "-i", str(seg["src"])]
+        vf = ["setsar=1", f"fps={FPS}", "format=yuv420p"]
+        if hold > 0:
+            vf.append(f"tpad=stop_mode=clone:stop={math.ceil(hold * FPS - 1e-6)}")
+        length = []
+    run(["ffmpeg", "-y", "-v", "error", *src, "-vf", ",".join(vf + fades), "-an", *length,
+         "-c:v", "libx264", "-preset", "slow", "-crf", "19", str(part)])
+
+
+def _mix_voices(voices: list[dict], track: Path) -> None:
+    """Every voice at its start on the reel's timeline, in one 48 kHz stereo track; levels as recorded (no normalize)."""
+    cmd, chains = ["ffmpeg", "-y", "-v", "error"], []
+    for k, v in enumerate(voices):
+        cmd += ["-i", v["file"]]
+        delay = round(v["start"] * VOICE_RATE)  # in samples
+        chains.append(f"[{k}:a]aresample={VOICE_RATE},aformat=sample_fmts=fltp:channel_layouts=stereo,"
+                      f"adelay={delay}S|{delay}S[v{k}]")
+    mix = "".join(f"[v{k}]" for k in range(len(voices))) + f"amix=inputs={len(voices)}:normalize=0[m]"
+    run(cmd + ["-filter_complex", ";".join(chains + [mix]), "-map", "[m]", "-c:a", "pcm_f32le", str(track)])
+
+
+def _loudness_filter(track: Path, target: float) -> tuple[str, str | None]:
+    """The filter that brings `track` to `target` LUFS integrated, true peak at most VOICE_TRUE_PEAK (ffmpeg's loudnorm,
+    second pass with the first pass's measurement: one gain), and a warning when that cannot be one plain gain."""
+    base = f"loudnorm=I={target:g}:TP={VOICE_TRUE_PEAK:g}:LRA={LOUDNORM_LRA}"
+    cmd = ["ffmpeg", "-hide_banner", "-nostats", "-i", str(track), "-af", base + ":print_format=json", "-f", "null", "-"]
+    print("+", " ".join(shlex.quote(c) for c in cmd), file=sys.stderr)
+    err = subprocess.run(cmd, check=True, capture_output=True, text=True).stderr
+    m = json.loads(err[err.rindex("{"):err.rindex("}") + 1])
+    level, peak, lra, thresh = (float(m[k]) for k in ("input_i", "input_tp", "input_lra", "input_thresh"))
+    if not level > -70:
+        return "anull", "the voices are silent: the voice track is left as it is"
+    note = None
+    if peak + target - level > VOICE_TRUE_PEAK or lra > LOUDNORM_LRA:
+        note = (f"the voice track cannot reach {target:g} LUFS by one gain (true peak {peak:.1f} dBTP at {level:.1f} LUFS, "
+                f"loudness range {lra:.1f} LU): loudnorm compresses instead, so the voices' levels against each other change")
+    return (base + f":measured_I={level}:measured_TP={peak}:measured_LRA={lra}:measured_thresh={thresh}"
+            f":offset={m['target_offset']}:linear=true"), note
+
+
+def build_narrated_reel(spec: Path, out: Path) -> None:
+    """A reel whose segments may carry a voice and may be pictures; writes <out> and <out stem>.voice.json.
+
+    spec: {"segments": [{"file": "clip.mp4", "start": 0, "end": 9, "voice": "line.mp3", "voice_at": 0.3, "group": "take"},
+                        {"image": "card.png", "seconds": 3, "voice": "card.mp3"}, ...],
+           "fade": 0.4, "voice_gap": 0.6, "voice_tail": 1.0, "loudness": -16}
+    Holds come from schedule() on the probed lengths. Each part is encoded and measured; a voice is placed at the measured
+    start of its part plus voice_at, so the sound cannot drift from the picture over a long reel.
+    """
+    cfg = json.loads(spec.read_text(), object_pairs_hook=_manifest_object)
+    segs, size = _narrated_segments(cfg)
+    gap, tail = float(cfg.get("voice_gap", VOICE_GAP)), float(cfg.get("voice_tail", VOICE_TAIL))
+    target = float(cfg.get("loudness", VOICE_LOUDNESS))
+    plan = schedule(segs, gap=gap, tail=tail)
+    with tempfile.TemporaryDirectory(prefix="reel-") as tmp_name:  # parts, join and voice track; removed at the end
+        tmp = Path(tmp_name)
+        parts, lengths = [], []
+        for i, (seg, p) in enumerate(zip(segs, plan)):
+            part = tmp / f"part{i:02d}.mp4"
+            _encode_narrated_part(seg, p["hold"], size, part)
+            parts.append(part)
+            lengths.append(probe_duration(part))
+        starts = [sum(lengths[:i]) for i in range(len(lengths))]
+        voices = [{"segment": i, "name": s["name"], "file": str(s["voice"].resolve()), "start": starts[i] + s["voice_at"],
+                   "end": starts[i] + s["voice_at"] + s["voice_seconds"]} for i, s in enumerate(segs) if "voice" in s]
+        lst = tmp / "list.txt"
+        lst.write_text("".join(f"file '{p}'\n" for p in parts))
+        joined = tmp / "joined.mp4"
+        run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy", str(joined)])
+        seconds = probe_duration(joined)
+        note = None
+        if voices:
+            track = tmp / "voices.wav"
+            _mix_voices(voices, track)
+            gain, note = _loudness_filter(track, target)
+            audio = ["-i", str(track)]
+            sound = f"{gain},aresample={VOICE_RATE},aformat=sample_fmts=fltp:channel_layouts=stereo,"
+        else:
+            audio = ["-f", "lavfi", "-i", f"anullsrc=channel_layout=stereo:sample_rate={VOICE_RATE}"]
+            sound = ""
+        out.parent.mkdir(parents=True, exist_ok=True)
+        run(["ffmpeg", "-y", "-v", "error", "-i", str(joined), *audio,
+             "-filter_complex", f"[1:a]{sound}apad=whole_dur={seconds:.4f},atrim=end={seconds:.4f}[a]",
+             "-map", "0:v", "-map", "[a]", *REEL_ENCODE, "-movflags", "+faststart", str(out)])
+    holds = [p["hold"] for p in plan]
+    warnings = [f"segment {n} ({s['name']}): a hold of {h:.1f} s, over {WARN_HOLD:g} s"
+                for n, (s, h) in enumerate(zip(segs, holds), 1) if h > WARN_HOLD]
+    if sum(holds) > WARN_HOLD_SHARE * seconds:
+        warnings.append(f"holds are {100 * sum(holds) / seconds:.0f} % of the reel ({sum(holds):.1f} of {seconds:.1f} s), "
+                        f"over {100 * WARN_HOLD_SHARE:.0f} %")
+    warnings += [f"segment {v['segment'] + 1} ({v['name']}): a voice of {v['end'] - v['start']:.1f} s, over {WARN_VOICE:g} s"
+                 for v in voices if v["end"] - v["start"] > WARN_VOICE]
+    warnings += [note] if note else []
+    r4 = lambda t: round(t, 4)  # noqa: E731
+    plan_path = out.with_suffix(".voice.json")
+    _write_json_atomic(plan_path, {
+        "segments": [{"name": s["name"], "start": r4(starts[i]), "seconds": r4(lengths[i]), "hold": r4(holds[i])}
+                     for i, s in enumerate(segs)],
+        "voices": [{**v, "start": r4(v["start"]), "end": r4(v["end"])} for v in voices],
+        "warnings": warnings})
+    for w in warnings:
+        print(f"reel: warning: {w}", file=sys.stderr)
+    print(json.dumps({"out": str(out), "seconds": round(probe_duration(out), 1), "parts": len(parts), "voices": len(voices),
+                      "held": round(sum(holds), 1), "plan": str(plan_path), "warnings": len(warnings)}, ensure_ascii=False))
 
 # ---------------------------------------------------------------- voice (Amazon Polly through the AWS CLI)
 
