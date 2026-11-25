@@ -114,3 +114,95 @@ def test_terminal_helpers_ship_and_reel_is_single_pass():
     code = (SKILL / "scripts" / "edit_demo.py").read_text()
     assert "REEL_ENCODE" in code and '"--copy"' in code, "reel must re-encode by default and keep --copy for the old join"
     assert "lang=ko" in code and "lang=ko" in (SKILL / "scripts" / "make_cards.py").read_text(), "font fallback must ask fontconfig for Korean"
+
+
+REFERENCE_MD = SKILL / "references" / "voice-and-highlight.md"
+MANIFEST_MD = SKILL / "references" / "reel-manifest.md"
+README_MD = PLUGIN / "README.md"
+
+
+def test_skill_points_to_the_voice_and_highlight_reference():
+    """SKILL.md links the reference and has a quick-reference row for each new thing; no project name in either."""
+    text = SKILL_MD.read_text()
+    assert "](references/voice-and-highlight.md)" in text
+    assert REFERENCE_MD.exists()
+    for row in ("rec.mark", "\"hold\": true", "python3 scripts/edit_demo.py voice", "python3 scripts/check_demo.py audit"):
+        assert row in text, f"SKILL.md has no quick-reference row for {row!r}"
+    for name in ("Bedrock", "AgentCore", "hosting hub", "Hosting Hub", "agent-hosting"):
+        assert name not in REFERENCE_MD.read_text() and name not in text, f"project name {name!r} in a skill document"
+
+
+def _script_sources() -> str:
+    return "".join((SKILL / "scripts" / f).read_text() for f in ("edit_demo.py", "check_demo.py", "record_demo.mjs", "term.mjs"))
+
+
+def test_every_option_and_field_the_documents_name_exists_in_the_scripts():
+    """The documents pin no wording: each --option and each "field" they name in backticks must exist in the scripts."""
+    code = _script_sources()
+    docs = REFERENCE_MD.read_text() + MANIFEST_MD.read_text() + SCRIPT_MD.read_text()
+    options = set(re.findall(r"(?<![\w-])(--[a-z][a-z-]+)", docs))
+    assert {"--readings", "--hangul-only", "--tolerance", "--plan", "--texts", "--boxes", "--raw", "--copy"} <= options
+    assert sorted(o for o in options if o not in code and o != "--help") == [], "an option the documents name is not in the scripts"
+    quoted = set(re.findall(r"`\"([a-z_]+)\"", docs))
+    # every field the documents list in the first cell of a table row (`image`, `seconds` | ...), quoted or bare
+    listed = {n for row in re.findall(r"^\| ([^|]+) \|", docs, re.M) for n in re.findall(r"`\"?([a-z_]+)\"?`", row)}
+    names = quoted | listed
+    assert {"box", "box_dur", "box_delay", "hold", "voice", "voice_at", "group", "image", "seconds", "voice_gap", "voice_tail", "loudness"} <= names
+    assert sorted(n for n in names if f'"{n}"' not in code) == [], "a field the documents name is not in the scripts"
+
+
+def test_the_default_numbers_the_documents_give_are_the_scripts_constants():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("edit_demo", SKILL / "scripts" / "edit_demo.py")
+    edit_demo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(edit_demo)
+    manifest, ref = MANIFEST_MD.read_text(), REFERENCE_MD.read_text()
+    assert float(re.search(r"`voice_gap`[^\n]*default ([0-9.]+)", manifest).group(1)) == edit_demo.VOICE_GAP
+    assert float(re.search(r"`voice_tail`[^\n]*default ([0-9.]+)", manifest).group(1)) == edit_demo.VOICE_TAIL
+    assert float(re.search(r"`loudness`[^\n]*default (-?[0-9.]+)", manifest).group(1)) == edit_demo.VOICE_LOUDNESS
+    assert float(re.search(r"`voice_gap` \(([0-9.]+) s\)", ref).group(1)) == edit_demo.VOICE_GAP
+    assert float(re.search(r"`voice_tail` \(([0-9.]+) s\)", ref).group(1)) == edit_demo.VOICE_TAIL
+    assert float(re.search(r"[−-]([0-9.]+) LUFS", ref).group(1)) == -edit_demo.VOICE_LOUDNESS
+    assert float(re.search(r"a hold over ([0-9.]+) s", ref).group(1)) == edit_demo.WARN_HOLD
+
+
+def test_the_reference_documents_name_the_new_fields():
+    """script.md carries the beat fields, reel-manifest.md the segment and top-level fields."""
+    script = SCRIPT_MD.read_text()
+    for must in ("box", "box_delay", "box_dur", "hold"):
+        assert f"`\"{must}\"" in script or f"`{must}`" in script, f"script.md does not document {must!r}"
+    manifest = MANIFEST_MD.read_text()
+    for must in ("image", "seconds", "voice", "voice_at", "group", "voice_gap", "voice_tail", "loudness", ".voice.json", "--copy"):
+        assert must in manifest, f"reel-manifest.md does not document {must!r}"
+
+
+def test_the_description_names_the_new_features_in_all_four_places():
+    """plugin.json, the marketplace entry, the README and the SKILL.md frontmatter change together."""
+    plugin = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text())["description"]
+    market = json.loads((PLUGIN.parents[1] / ".claude-plugin" / "marketplace.json").read_text())
+    entry = next(p for p in market["plugins"] if p["name"] == "demo-video")["description"]
+    places = {"plugin.json": plugin, "marketplace.json": entry, "SKILL.md": frontmatter(), "README.md": README_MD.read_text()}
+    for where, text in places.items():
+        low = text.lower()
+        assert "highlight box" in low or "강조 상자" in text, f"{where} does not name the highlight boxes"
+        assert "narrat" in low or "내레이션" in text, f"{where} does not name the narrated reels"
+
+
+def test_the_readme_states_the_one_new_requirement_and_the_origin():
+    readme = README_MD.read_text()
+    assert "polly:SynthesizeSpeech" in readme, "the only new requirement: the AWS CLI, for synthesis only"
+    assert "2026-11-24" in readme and "check_demo.py" in readme
+
+
+def test_the_version_is_1_4_0_wherever_it_is_written():
+    """The version lives in plugin.json only; the descriptions and the README's origin section name the release."""
+    plugin = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text())
+    assert plugin["version"] == "1.4.0"
+    assert "1.4.0 adds" in plugin["description"] and "1.3.0 adds" in plugin["description"], "both releases stay in the history sentence"
+    market = json.loads((PLUGIN.parents[1] / ".claude-plugin" / "marketplace.json").read_text())
+    entry = next(p for p in market["plugins"] if p["name"] == "demo-video")
+    assert "version" not in entry and entry["description"].rstrip().endswith("1.4.0.")
+    assert market["metadata"]["version"] == "1.0.0", "the marketplace's own version stays"
+    assert "1.3.0." not in entry["description"]
+    assert re.search(r"^- 1\.4\.0 \(2026-11-24", README_MD.read_text(), re.M), "the README's origin section names the release"
+    assert "version" not in frontmatter(), "the skill's frontmatter carries no version"

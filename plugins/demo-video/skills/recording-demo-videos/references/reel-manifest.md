@@ -32,3 +32,35 @@ Per-segment `fade_in` / `fade_out` (seconds, `0` = hard cut) override `fade` for
 ```
 
 `04b` was clipped with `"speed": 4`, so its 17.5 s of agent turns play in 4.4 s; the viewer sees one continuous scene. Every segment must have the same resolution; the tool aborts before encoding if two files differ.
+
+## Narrated reel: voices and picture segments
+
+A segment may carry a voice, and a segment may be a picture instead of a clip. A manifest with a `voice` or an `image` anywhere is a narrated reel; one with neither runs exactly as described above.
+
+```json
+{"fade": 0.4, "voice_gap": 0.6, "voice_tail": 1.0, "loudness": -16, "segments": [
+ {"image": "clips/card-intro.png", "seconds": 3, "voice": "voice/intro.mp3", "voice_at": 0.3},
+ {"file": "clips/take.1.mp4", "start": 0, "end": 4.5, "voice": "voice/log.mp3", "voice_at": 0.3, "group": "a", "fade_out": 0},
+ {"file": "clips/take.1.mp4", "start": 4.5, "end": 9.9, "group": "a", "fade_in": 0}
+]}
+```
+
+| Field | Where | Meaning |
+|---|---|---|
+| `image`, `seconds` | segment | a picture drawn for `seconds` (above 0; longer when its voice needs it), scaled to fit the clips' frame and letterboxed; `start` and `end` are ignored. Use it for a card under narration: a card clip has its fade baked in and would hold black. |
+| `voice` | segment | one audio file (any format ffmpeg reads) per segment |
+| `voice_at` | segment | seconds into the segment where the voice starts; default 0, must lie inside the segment |
+| `group` | segment | a voice runs on over the following segments with an equal, non-empty `group`; without it a voice's range is its own segment |
+| `voice_gap` | top level | least silence between two voices; default 0.6 s |
+| `voice_tail` | top level | how long the reel runs after the last voice; default 1.0 s |
+| `loudness` | top level | integrated loudness of the voice track in LUFS; default -16, true peak at most -1.5 dBTP |
+
+- The reel holds a segment's last frame until its voice has ended, mixes the voices into the reel's only sound (the clips' own audio is dropped) and places each voice by the measured length of the parts before it, not by the lengths the manifest states.
+- It writes `<reel stem>.voice.json` beside the reel: each segment's measured `start`, `seconds` and `hold`, each clip segment's `"window"` (the seconds of its clip it shows), each voice's measured `start` and `end`, and `warnings` (a hold over 6 s, holds over 30 % of the reel, a voice over 14 s, a voice track that one gain brings only near the target, with the level reached, and one that has to be compressed; none of them stops the reel). `check_demo.py audit` and `sheet` read that file.
+- The voice track is brought to `loudness` with one gain when that reaches it under the true-peak ceiling; else with the largest gain the ceiling allows when that lands within 1.5 LU of it; else loudnorm compresses, which changes the voices' levels against each other. The three ways are in [voice-and-highlight.md](voice-and-highlight.md).
+- `fade`, `fade_in` and `fade_out` apply to a narrated reel as to any other. Pieces of one `group` are one scene: `fade_out: 0` on the earlier and `fade_in: 0` on the later, as in the example, or the picture dips to black while the voice runs on.
+- The plan file holds the absolute paths of the voice files.
+- `--copy` is refused for a narrated reel.
+- A voice track shorter than about 3 s that has to be compressed comes out quieter than the target, with a warning.
+
+The schedule's rules, the checks and their limits are in [voice-and-highlight.md](voice-and-highlight.md).
