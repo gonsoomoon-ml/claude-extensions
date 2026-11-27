@@ -4,7 +4,7 @@
     "name": "gonsoomoon-ml"
   },
   "metadata": {
-    "description": "Plugins from gonsoomoon-ml/claude-extensions: deck-design (slide deck design and build), concise-response (summary-first responses), infographic-design (one feed-post infographic that survives blurring and reposting: design schemes, tokens, templates, render and lint) and demo-video (demo / LinkedIn videos of a web UI: story script, Playwright recording with an in-page camera, captions, cards and a highlight reel; fork of hi-space/hi-aws-skills demo-video-recorder).",
+    "description": "Plugins from gonsoomoon-ml/claude-extensions: deck-design (slide deck design and build), concise-response (summary-first responses), infographic-design (one feed-post infographic that survives blurring and reposting: design schemes, tokens, templates, render and lint) and demo-video (narrated demo / LinkedIn videos of a web UI: story script, Playwright recording with an in-page camera, captions, cards and a highlight reel; fork of hi-space/hi-aws-skills demo-video-recorder).",
     "version": "1.0.0"
   },
   "plugins": [
@@ -26,7 +26,7 @@
     {
       "name": "demo-video",
       "source": "./plugins/demo-video",
-      "description": "Demo / LinkedIn videos of a web UI on a headless Linux box: story script first (intro card, chapters, 합니다체 captions, summary card), Playwright wall-clock recording with an in-page CSS camera (crisp zoom-ins), title card and captions burned from beats anchored to UI events, red highlight boxes, sped-up waits, highlight reel from several clips, narrated reels (Amazon Polly voice, picture waits for the voice) with checks. Also films a terminal CLI through a ttyd browser terminal (term.mjs) and captions user-made screen recordings (.mov). Fork of hi-space/hi-aws-skills demo-video-recorder 1.2.0 (MIT), 1.4.0."
+      "description": "Narrated demo / LinkedIn videos (voice by Amazon Polly) of a web UI or a terminal on a headless Linux box: story script first (intro card, chapters, 합니다체 captions, summary card), Playwright wall-clock recording with an in-page CSS camera (crisp zoom-ins), title card and captions burned from beats anchored to UI events, red highlight boxes, sped-up waits, highlight reel from several clips, narrated reels (Amazon Polly voice, picture waits for the voice) with checks. Also films a terminal CLI through a ttyd browser terminal (term.mjs) and captions user-made screen recordings (.mov). Fork of hi-space/hi-aws-skills demo-video-recorder 1.2.0 (MIT), 1.4.0."
     }
   ]
 }

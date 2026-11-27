@@ -1,6 +1,6 @@
 # demo-video
 
-웹 UI 데모 영상을 대본, 녹화, 자막, 하이라이트 릴 순서로 만드는 스킬입니다. 링크드인 게시용 시연 영상을 만들면서 정리한 절차와 스크립트를 한 플러그인으로 묶었습니다. AWS 전용은 아니며 GUI 없는 리눅스 서버에서 Playwright와 ffmpeg만으로 돕니다. 터미널 CLI(Claude Code 등)도 브라우저 터미널(ttyd)을 거쳐 같은 카메라로 찍습니다. 자막이 가리키는 곳에 빨간 강조 상자(highlight box)를 그리고, 음성을 합성해 내레이션 릴(narrated reel)을 만들고, 만든 릴을 검사하는 도구도 있습니다.
+웹 UI와 터미널의 시연 영상을 대본, 녹화, 자막, 내레이션(음성), 하이라이트 릴 순서로 만드는 스킬입니다. 링크드인 게시용 시연 영상을 만들면서 정리한 절차와 스크립트를 한 플러그인으로 묶었습니다. AWS 전용은 아니며 GUI 없는 리눅스 서버에서 Playwright와 ffmpeg만으로 돕니다. 터미널 CLI(Claude Code 등)도 브라우저 터미널(ttyd)을 거쳐 같은 카메라로 찍습니다. 자막이 가리키는 곳에 빨간 강조 상자(highlight box)를 그리고, 음성을 합성해 내레이션 릴(narrated reel)을 만들고, 만든 릴을 검사하는 도구도 있습니다.
 
 [![이 플러그인으로 만든 내레이션 시연 영상](https://img.youtube.com/vi/cp0YKgAmrxM/maxresdefault.jpg)](https://youtu.be/cp0YKgAmrxM)
 
