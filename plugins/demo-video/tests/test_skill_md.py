@@ -195,10 +195,13 @@ def test_the_readme_states_the_one_new_requirement_and_the_origin():
 
 
 def test_the_version_is_1_4_0_wherever_it_is_written():
-    """The version lives in plugin.json only; the descriptions and the README's origin section name the release."""
+    """The version lives in plugin.json only; CHANGELOG.md, the marketplace entry and the README's origin section name the release."""
     plugin = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text())
     assert plugin["version"] == "1.4.0"
-    assert "1.4.0 adds" in plugin["description"] and "1.3.0 adds" in plugin["description"], "both releases stay in the history sentence"
+    assert "CHANGELOG.md" in plugin["description"] and " adds " not in plugin["description"], "the history lives in CHANGELOG.md, not the description"
+    changelog = (PLUGIN / "CHANGELOG.md").read_text()
+    for release in ("1.4.0 (2026-11-24)", "1.3.0 (2026-11-09)", "1.2.0 (2026-11-09)"):
+        assert f"## {release}" in changelog, f"CHANGELOG.md has no section for {release}"
     market = json.loads((PLUGIN.parents[1] / ".claude-plugin" / "marketplace.json").read_text())
     entry = next(p for p in market["plugins"] if p["name"] == "demo-video")
     assert "version" not in entry and entry["description"].rstrip().endswith("1.4.0.")
