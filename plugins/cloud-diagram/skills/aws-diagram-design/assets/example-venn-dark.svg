@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1000 472" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="venn-dark-title venn-dark-desc">
+      <title id="venn-dark-title">Good design · Desirable × Feasible × Viable</title>
+      <desc id="venn-dark-desc">Venn diagram showing desirable, feasible, and viable product qualities intersecting at shippable.</desc>
+        <defs>
+    <style>
+/* page-css */
+@font-face { font-family: 'Amazon Ember'; font-weight: 300; font-style: normal; src: local('Amazon Ember Light'), local('Amazon Ember'); }
+@font-face { font-family: 'Amazon Ember'; font-weight: 400; font-style: normal; src: local('Amazon Ember'); }
+@font-face { font-family: 'Amazon Ember'; font-weight: 400; font-style: italic; src: local('Amazon Ember Italic'), local('Amazon Ember'); }
+@font-face { font-family: 'Amazon Ember'; font-weight: 600; font-style: normal; src: local('Amazon Ember Medium'), local('Amazon Ember'); }
+@font-face { font-family: 'Amazon Ember'; font-weight: 700; font-style: normal; src: local('Amazon Ember Bold'), local('Amazon Ember'); }
+@font-face { font-family: 'Amazon Ember'; font-weight: 800; font-style: normal; src: local('Amazon Ember Heavy'), local('Amazon Ember'); }
+@font-face { font-family: 'Amazon Ember Mono'; font-weight: 400; font-style: normal; src: local('Amazon Ember Mono'); }
+@font-face { font-family: 'Amazon Ember Mono'; font-weight: 700; font-style: normal; src: local('Amazon Ember Mono Bold'), local('Amazon Ember Mono'); }
+/* /page-css */
+    </style>
+          <clipPath id="clip-center">
+            <circle cx="500" cy="180" r="140"/>
+          </clipPath>
+          <clipPath id="clip-center-2">
+            <circle cx="428" cy="320" r="140"/>
+          </clipPath>
+        </defs>
+
+        <rect width="100%" height="100%" fill="#161E2D"/>
+
+        <!-- Three set circles (stroke + very-low-opacity tint; tints compound in overlaps) -->
+        <!-- Desirable — top, ink -->
+        <circle cx="500" cy="180" r="140" fill="rgba(255,255,255,0.04)" stroke="#FFFFFF" stroke-width="1"/>
+        <!-- Feasible — bottom-left, muted -->
+        <circle cx="428" cy="320" r="140" fill="rgba(182,190,201,0.05)" stroke="#B6BEC9" stroke-width="1"/>
+        <!-- Viable — bottom-right, soft -->
+        <circle cx="572" cy="320" r="140" fill="rgba(142,140,131,0.05)" stroke="#8D99A8" stroke-width="1"/>
+
+        <!-- Coral focal tint on the all-three intersection -->
+        <g clip-path="url(#clip-center)">
+          <g clip-path="url(#clip-center-2)">
+            <circle cx="572" cy="320" r="140" fill="rgba(255,153,0,0.14)"/>
+          </g>
+        </g>
+
+        <!-- Set labels -->
+        <text x="500" y="20" fill="#FFFFFF" font-size="14" font-weight="600" font-family="'Amazon Ember', 'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle">Desirable</text>
+        <text x="500" y="36" fill="#B6BEC9" font-size="13" font-family="'Amazon Ember', 'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle">PEOPLE WANT IT</text>
+
+        <text x="152" y="400" fill="#B6BEC9" font-size="14" font-weight="600" font-family="'Amazon Ember', 'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start">Feasible</text>
+        <text x="152" y="416" fill="#B6BEC9" font-size="13" font-family="'Amazon Ember', 'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="start">WE CAN BUILD IT</text>
+
+        <text x="848" y="400" fill="#8D99A8" font-size="14" font-weight="600" font-family="'Amazon Ember', 'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="end">Viable</text>
+        <text x="848" y="416" fill="#B6BEC9" font-size="13" font-family="'Amazon Ember', 'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="end">BUSINESS SUSTAINS</text>
+
+        <!-- Pairwise intersection labels -->
+        <text x="360" y="232" fill="#B6BEC9" font-size="12" font-weight="600" font-family="'Amazon Ember', 'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle">Prototype</text>
+        <text x="360" y="248" fill="#B6BEC9" font-size="11" font-family="'Amazon Ember', 'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle">no business model</text>
+
+        <text x="640" y="232" fill="#B6BEC9" font-size="12" font-weight="600" font-family="'Amazon Ember', 'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle">Vaporware</text>
+        <text x="640" y="248" fill="#B6BEC9" font-size="11" font-family="'Amazon Ember', 'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle">can't build it</text>
+
+        <text x="500" y="368" fill="#B6BEC9" font-size="12" font-weight="600" font-family="'Amazon Ember', 'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle">Internal tool</text>
+        <text x="500" y="384" fill="#B6BEC9" font-size="11" font-family="'Amazon Ember', 'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle">nobody wants it</text>
+
+        <!-- Focal: all-three center -->
+        <text x="500" y="260" fill="#FF9900" font-size="14" font-weight="600" font-family="'Amazon Ember', 'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle">Shippable</text>
+        <text x="500" y="276" fill="#B6BEC9" font-size="13" font-family="'Amazon Ember', 'Helvetica Neue', Helvetica, Arial, sans-serif" text-anchor="middle">THE SWEET SPOT</text>
+</svg>
