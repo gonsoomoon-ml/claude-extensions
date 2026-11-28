@@ -560,3 +560,23 @@ def test_a_wrong_box_dur_stops_the_clip_before_ffmpeg_with_one_line(tmp_path, pr
     assert seen == [], "ffmpeg never starts"
     assert "\n" not in message and "box_dur" in message and "'late'" in message, message
     assert all(w in message for w in words), message
+
+
+# ---------------------------------------------------------------- 1.6.0: a beat or a box anchored to a press
+
+TAPS = [{"t": 1.0, "kind": "tap", "key": "a", "rect": [100, 100, 200, 50], "point": [200, 125]},
+        {"t": 2.0, "kind": "hover", "key": "m", "rect": [10, 10, 80, 30], "point": [50, 25]},
+        {"t": 3.0, "kind": "tap", "key": "b", "rect": [400, 300, 120, 40], "point": [460, 320]},
+        {"t": 5.0, "kind": "tap", "key": "a", "rect": [100, 400, 200, 50], "point": [200, 425]}]
+
+
+def test_a_beat_can_be_anchored_to_a_press_or_a_hover():
+    assert [edit_demo.script_time(at, TAPS) for at in ("tap:a", "tap:a#2", "tap#2", "hover:m")] == [1.0, 5.0, 3.0, 2.0]
+    with pytest.raises(SystemExit, match="script anchor not found in camlog: 'tap:zzz'"):
+        edit_demo.script_time("tap:zzz", TAPS)
+
+
+def test_a_box_can_point_at_what_was_pressed():
+    assert edit_demo.beat_boxes({"box": "tap:a#2"}, TAPS) == [(88, 388, 224, 74)]      # the rect grown by the border + 4 px
+    with pytest.raises(SystemExit, match="'tap:<key>'"):
+        edit_demo.beat_boxes({"box": "tap:zzz"}, TAPS)

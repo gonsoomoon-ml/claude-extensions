@@ -119,6 +119,7 @@ def test_terminal_helpers_ship_and_reel_is_single_pass():
 REFERENCE_MD = SKILL / "references" / "voice-and-highlight.md"
 MANIFEST_MD = SKILL / "references" / "reel-manifest.md"
 README_MD = PLUGIN / "README.md"
+POINTER_MD = SKILL / "references" / "pointer.md"
 
 
 def test_skill_points_to_the_voice_and_highlight_reference():
@@ -133,13 +134,14 @@ def test_skill_points_to_the_voice_and_highlight_reference():
 
 
 def _script_sources() -> str:
-    return "".join((SKILL / "scripts" / f).read_text() for f in ("edit_demo.py", "check_demo.py", "record_demo.mjs", "term.mjs"))
+    return "".join((SKILL / "scripts" / f).read_text()
+                   for f in ("edit_demo.py", "check_demo.py", "record_demo.mjs", "term.mjs", "pointer.mjs", "frametext.mjs"))
 
 
 def test_every_option_and_field_the_documents_name_exists_in_the_scripts():
     """The documents pin no wording: each --option and each "field" they name in backticks must exist in the scripts."""
     code = _script_sources()
-    docs = REFERENCE_MD.read_text() + MANIFEST_MD.read_text() + SCRIPT_MD.read_text()
+    docs = REFERENCE_MD.read_text() + MANIFEST_MD.read_text() + SCRIPT_MD.read_text() + POINTER_MD.read_text()
     options = set(re.findall(r"(?<![\w-])(--[a-z][a-z-]+)", docs))
     assert {"--readings", "--hangul-only", "--tolerance", "--plan", "--texts", "--boxes", "--raw", "--copy"} <= options
     assert sorted(o for o in options if o not in code and o != "--help") == [], "an option the documents name is not in the scripts"
@@ -194,21 +196,21 @@ def test_the_readme_states_the_one_new_requirement_and_the_origin():
     assert "2026-11-24" in readme and "check_demo.py" in readme
 
 
-def test_the_version_is_1_5_0_wherever_it_is_written():
+def test_the_version_is_1_6_0_wherever_it_is_written():
     """The version lives in plugin.json only; CHANGELOG.md, the marketplace entry and the README's origin section name the release."""
     plugin = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text())
-    assert plugin["version"] == "1.5.0"
+    assert plugin["version"] == "1.6.0"
     assert "CHANGELOG.md" in plugin["description"] and " adds " not in plugin["description"], "the history lives in CHANGELOG.md, not the description"
     changelog = (PLUGIN / "CHANGELOG.md").read_text()
-    for release in ("1.5.0 (2026-11-28)", "1.4.0 (2026-11-24)", "1.3.0 (2026-11-09)", "1.2.0 (2026-11-09)"):
+    for release in ("1.6.0 (2026-11-28)", "1.5.0 (2026-11-28)", "1.4.0 (2026-11-24)", "1.3.0 (2026-11-09)", "1.2.0 (2026-11-09)"):
         assert f"## {release}" in changelog, f"CHANGELOG.md has no section for {release}"
     market = json.loads((PLUGIN.parents[1] / ".claude-plugin" / "marketplace.json").read_text())
     entry = next(p for p in market["plugins"] if p["name"] == "demo-video")
-    assert "version" not in entry and entry["description"].rstrip().endswith("1.5.0.")
+    assert "version" not in entry and entry["description"].rstrip().endswith("1.6.0.")
     assert market["metadata"]["version"] == "1.0.0", "the marketplace's own version stays"
-    assert "1.3.0." not in entry["description"] and "1.4.0." not in entry["description"]
+    assert all(old not in entry["description"] for old in ("1.3.0.", "1.4.0.", "1.5.0."))
     readme = README_MD.read_text()
-    for line in (r"^- 1\.5\.0 \(2026-11-28", r"^- 1\.4\.0 \(2026-11-24"):
+    for line in (r"^- 1\.6\.0 \(2026-11-28", r"^- 1\.5\.0 \(2026-11-28", r"^- 1\.4\.0 \(2026-11-24"):
         assert re.search(line, readme, re.M), "the README's origin section names each release"
     assert "version" not in frontmatter(), "the skill's frontmatter carries no version"
 
@@ -224,3 +226,18 @@ def test_the_documents_teach_writing_from_the_take():
     assert "check_demo.py brief" in script, "script.md's working order writes the beats from the brief"
     readme = README_MD.read_text()
     assert "check_demo.py brief" in readme and "frametext" in readme
+
+
+def test_the_documents_teach_pressing_with_the_pointer():
+    """1.6.0: a press is the real mouse under a pointer the video shows; references/pointer.md says how."""
+    skill, ref = SKILL_MD.read_text(), POINTER_MD.read_text()
+    assert "](references/pointer.md)" in skill and "rec.tap" in skill and "--no-pointer" in skill
+    for must in ("rec.tap", "rec.hover", "--no-pointer", "--dialogs", "--backdrop", '`"covered"`', '`"outside"`', '`"same_tab"`',
+                 '`"point"`', '`"soft"`', "tap:<key>", "pan", "scroll", "load", "popup", "dialog", "showModal", "iframe", "sticky"):
+        assert must in ref, f"pointer.md does not name {must!r}"
+    for name in ("Bedrock", "AgentCore", "hosting hub", "Hosting Hub", "agent-hosting"):
+        assert name not in ref
+    readme = README_MD.read_text()
+    assert "--no-pointer" in readme and "rec.tap" in readme
+    assert "rec.tap(" in (SKILL / "scripts" / "storyboard.example.mjs").read_text()
+    assert "installed again" not in REFERENCE_MD.read_text(), "1.6.0 puts the camera back after a reload by itself"

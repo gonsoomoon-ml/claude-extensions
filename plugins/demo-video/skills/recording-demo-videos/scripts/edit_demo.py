@@ -38,6 +38,7 @@ Script JSON:
      {"at": "shot:stage", "text": "Laya가 다음 스킬을 판단합니다", "dur": 5},
      {"at": "caption:System 2에 복구", "offset": 0.5, "text": "확률 0.95인데도 규칙이 이관합니다"},
      {"at": "note:play", "text": "…"},          # any rec.note(kind)
+     {"at": "tap:run", "text": "…"},            # a press, by its key (rec.tap(locator, {key: 'run'})); "hover:<key>" likewise
      {"at": "shot:stage#2", "text": "…"},       # 2nd occurrence
      {"at": 41.0, "text": "…", "dur": 5.5},         # raw seconds; dur = end the caption before the next action
      {"at": "shot:table", "text": "…", "pos": "top"}  # caption at the top when the lower third hides the evidence
@@ -136,8 +137,9 @@ def drawtext(textfile: Path, *, font: str, size: int, x: str, y: str, start: flo
 
 def script_time(at, log: list[dict]) -> float:
     """Resolve a beat anchor to raw seconds. Forms: number | 'shot:<key>[#n]' | 'mark:<key>[#n]' |
+    'tap:<key>[#n]' | 'hover:<key>[#n]' (a press or a hover of the pointer, 1.6.0) |
     'caption:<substring>[#n]' | 'note:<kind>[#n]' | '<kind>[#n]' (any camlog kind, e.g. 'scene_end', 'play').
-    A 'mark' without a key matches every entry of kind mark, as in 1.3.0 (rec.note('mark'))."""
+    A 'mark', 'tap' or 'hover' without a key matches every entry of that kind ('tap#2': the second press)."""
     if isinstance(at, (int, float)):
         return float(at)
     spec, _, nth = str(at).partition("#")
@@ -145,7 +147,7 @@ def script_time(at, log: list[dict]) -> float:
     kind, _, arg = spec.partition(":")
     if kind == "note":
         kind, arg = arg, ""
-    if kind == "shot" or (kind == "mark" and arg):
+    if kind == "shot" or (kind in ("mark", "tap", "hover") and arg):   # by key; tap / hover without one: by kind, below
         hits = [e for e in log if e["kind"] == kind and e.get("key") == arg]
     elif kind == "caption":
         hits = [e for e in log if e["kind"] == "caption" and arg in e.get("text", "")]
@@ -176,7 +178,8 @@ def _frame_rect(box, grow: int = 0) -> tuple[int, int, int, int]:
 
 def beat_boxes(beat: dict, log: list[dict]) -> list[tuple[int, int, int, int]]:
     """The rectangles a beat's "box" asks for, as they will be drawn. Numbers are drawn as given; a camlog rect
-    ("shot:<key>[#n]" / "mark:<key>[#n]") is the element's own bounds, so it is grown by the border + 4 px."""
+    ("shot:<key>[#n]" / "mark:<key>[#n]" / "tap:<key>[#n]", the pressed element) is the element's own bounds, so it
+    is grown by the border + 4 px."""
     box = beat.get("box")
     if box is None or box == []:
         return []
@@ -184,9 +187,9 @@ def beat_boxes(beat: dict, log: list[dict]) -> list[tuple[int, int, int, int]]:
         spec, _, nth = box.partition("#")
         kind, _, key = spec.partition(":")
         n = int(nth) if nth else 1
-        hits = [e for e in log if e["kind"] == kind and e.get("key") == key] if kind in ("shot", "mark") else []
+        hits = [e for e in log if e["kind"] == kind and e.get("key") == key] if kind in ("shot", "mark", "tap") else []
         if len(hits) < n or not hits[n - 1].get("rect"):
-            _bad_box(box, "has no rect in the camlog (use 'shot:<key>' or 'mark:<key>' of an element the recorder measured)")
+            _bad_box(box, "has no rect in the camlog (use 'shot:<key>', 'mark:<key>' or 'tap:<key>' of an element the recorder measured)")
         return [_frame_rect(hits[n - 1]["rect"], grow=HIGHLIGHT_THICK + 4)]
     if not isinstance(box, (list, tuple)):
         _bad_box(box, "needs [x, y, w, h], a list of them, or 'shot:<key>' / 'mark:<key>'")

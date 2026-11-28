@@ -36,7 +36,7 @@ STORYBOARD = """export default async function storyboard({ page, rec, siteUrl })
 
 
 def test_node_scripts_parse():
-    for f in ("record_demo.mjs", "storyboard.example.mjs", "frametext.mjs"):
+    for f in ("record_demo.mjs", "storyboard.example.mjs", "frametext.mjs", "pointer.mjs"):
         subprocess.run(["node", "--check", str(SCRIPTS / f)], check=True)
 
 
@@ -64,6 +64,22 @@ def frame_pixels(video: Path, t: float, tmp: Path) -> "list[tuple[int, int, int]
     w, h = im.size
     assert (w, h) == (1920, 1080)
     return [im.getpixel((w - 3, h - 3)), im.getpixel((w - 3, 3)), im.getpixel((w // 2, h // 2))]
+
+
+def test_pointer_travel_time_grows_with_the_distance_to_a_cap():
+    """1.6.0: the pointer takes 0.25 s plus 0.35 s per 1000 px, at most 0.9 s (pointer.mjs)."""
+    code = ("import { POINTER, travelSeconds } from %r;"
+            "console.log(JSON.stringify([travelSeconds(0), travelSeconds(1000), travelSeconds(5000), POINTER.id]));"
+            % (SCRIPTS / "pointer.mjs").as_uri())
+    out = subprocess.run(["node", "--input-type=module", "-e", code], capture_output=True, text=True, check=True).stdout
+    assert json.loads(out) == [0.25, 0.6, 0.9, "__demo_pointer"]
+
+
+def test_dialogs_must_be_one_of_three():
+    """1.6.0: --dialogs accept (default), dismiss or leave; anything else is a usage error, said before Playwright loads."""
+    r = subprocess.run(["node", str(SCRIPTS / "record_demo.mjs"), "--url", "http://localhost:1", "--storyboard", "x.mjs",
+                        "--dialogs", "maybe"], capture_output=True, text=True)
+    assert r.returncode == 2 and "--dialogs must be accept, dismiss or leave, got maybe" in r.stderr
 
 
 @pytest.mark.skipif(PW_ROOT is None or shutil.which("ffmpeg") is None, reason="needs PLAYWRIGHT_ROOT and ffmpeg")
@@ -374,8 +390,8 @@ export default async function storyboard({ page, rec, siteUrl, option }) {
   rec.note('timing', { ms });
   await rec.reset('wide2', 'overview again');
   await rec.sleep(1600);
-  await page.goto(siteUrl); await page.waitForTimeout(300);   // a reload takes the camera away
-  await rec.text('gone');                                     // no camera: no entry, the take goes on
+  await page.goto(siteUrl); await page.waitForTimeout(300);   // a reload: the recorder puts the camera back by itself (1.6.0)
+  await rec.text('back');                                     // so the reloaded page's text is kept
 }"""
 
 
@@ -386,9 +402,10 @@ def test_frame_text_holds_what_the_frame_shows_and_nothing_else(tmp_path, layout
     assert r.returncode == 0, r.stderr
     raw = tmp_path / "raw"
     e = read_frametext(raw / "t.frametext.txt")
-    assert [(x["kind"], x["key"]) for x in e] == [("shot", "wide"), ("shot", "panel"), ("mark", "title"),
-                                                  ("text", "now"), ("leave", "panel"), ("shot", "wide2")]
-    wide, panel, title, now, leave, wide2 = (x["text"] for x in e)
+    assert [(x["kind"], x["key"]) for x in e] == [("shot", "wide"), ("shot", "panel"), ("mark", "title"), ("text", "now"),
+                                                  ("leave", "panel"), ("shot", "wide2"), ("text", "back")]
+    wide, panel, title, now, leave, wide2, back = (x["text"] for x in e)
+    assert "INSIDE-ALPHA" in back and "LATER-RESULT" not in back, "the page as it was loaded again"
     for s in ("INSIDE-ALPHA", "OUTSIDE-OMEGA", "VISIBLE-ROW", "typed-query", "foobar baz", "ROW-0"):
         assert s in wide, s
     for s in ("CLIPPED-ROW", "HIDDEN-TEXT", "INVISIBLE-TEXT", "secret-pw", "ROW-2999"):
@@ -450,3 +467,21 @@ def test_frame_text_keeps_a_popover_outside_its_overflow_parent_and_a_line_of_mi
     for s in ("SHELL-ROW", "FIXED-POPOVER", "ABS-POPOVER", "Queued 1,204 Done"):
         assert s in shot["text"], (s, shot["text"])
     assert "ABS-CLIPPED" not in shot["text"], "cut by the box it is positioned in"
+
+
+SPACES_PAGE = """<!doctype html><html><head><style>html,body{margin:0;background:#202830;color:#fff;font:20px/30px sans-serif}</style></head><body>
+<p id="s">Available for<!-- --> <a href="#a">TypeScript</a>,<!-- --> <a href="#b">Python</a>, and<!-- --> <a href="#c">Java</a>.</p>
+</body></html>"""
+
+
+@pytest.mark.skipif(PW_ROOT is None or shutil.which("ffmpeg") is None, reason="needs PLAYWRIGHT_ROOT and ffmpeg")
+def test_frame_text_keeps_a_space_that_is_a_text_node_of_its_own(tmp_path):
+    """Found on a real site, 2026-11-28: a framework writes ',<!-- --> <a>' and the space is a text node of nothing but
+    whitespace. The frame showed 'TypeScript, Python'; the frame text said 'TypeScript,Python'."""
+    r = record(tmp_path, SPACES_PAGE, """export default async function storyboard({ page, rec, siteUrl }) {
+  await page.goto(siteUrl); await page.waitForTimeout(300); await rec.install();
+  await rec.reset('wide', 'overview');
+}""")
+    assert r.returncode == 0, r.stderr
+    (shot,) = read_frametext(tmp_path / "raw" / "t.frametext.txt")
+    assert shot["text"] == "Available for TypeScript, Python, and Java."

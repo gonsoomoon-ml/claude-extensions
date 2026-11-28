@@ -95,7 +95,7 @@ Limits:
 - text inside a picture, a `canvas`, an `iframe` or a shadow root is not read: write such rows from the stills;
 - the value of a `type="password"` field is never read;
 - text that arrives after a capture is missing until the next `leave` or `rec.text`;
-- a capture needs the camera on the page: before `rec.install()`, and after a reload until it is installed again, nothing is kept and nothing stops.
+- a capture needs the camera on the page: before the first `rec.install()` nothing is kept and nothing stops. After it the recorder puts the camera back on every new page by itself ([pointer.md](pointer.md)).
 
 The file is the take's content as text: keep it where the take is kept. The recorder never writes a `<name>.texts.txt`; a storyboard that keeps such a file of its own keeps it.
 
@@ -128,7 +128,7 @@ With `--script` a row starts where its caption starts (the clip step's own times
 | `"text"` | the frame's text as the row starts |
 | `"text_end"` | the frame's text as the camera leaves the row's last view (`leave`), when it differs |
 | `"texts"` | what `rec.text` kept inside the row; per caption everything kept later in the row, in the take's order: each following view's text as the camera arrives and as it leaves |
-| `"marks"`, `"notes"` | the camlog's marks, with their text, and its other entries inside the row |
+| `"marks"`, `"notes"` | the camlog's marks, with their text, and its other entries inside the row; a press (`tap`) comes with its key, label and the pressed element's text |
 | `"stills"` | three file names: after the camera stops (per caption: half a clip second after the caption), the middle, 0.2 s before the end; one per row with `--every` |
 
 The budget: 0.3 s is the lead from a caption to its voice, `voice_gap` (0.6 s) the reel's silence between two voices. The rate is the spoken characters a second, spaces counted: measured in the `voice.json` that `--voices` names when it has lines, else `--rate`, else 7.6 (7.63 on the 70 Korean lines of a narration synthesized on 2026-11-24). The report says which. A take recorded before the recorder kept frame text gives rows without text, with one line on stderr.

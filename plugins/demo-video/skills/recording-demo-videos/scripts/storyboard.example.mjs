@@ -1,7 +1,7 @@
 // Storyboard for record_demo.mjs: one exported async function that drives the page and the camera.
 // Adapt selectors and the probe to the UI being recorded. Fixed rec.sleep holds are enough when you know what happens;
 // the probe loop below is for UIs that change at unpredictable times.
-export default async function storyboard({ page, rec, tap, siteUrl, maxSeconds }) {
+export default async function storyboard({ page, rec, siteUrl, maxSeconds }) {
   await page.goto(`${siteUrl}/?paused=1`, { waitUntil: 'networkidle' });   // ?paused=1 is this app's own feature; polling apps: waitForSelector
   await page.waitForTimeout(1500);                                          // fonts, WebGL, layout settle
   await rec.install();                                                      // camera must be installed after load
@@ -10,8 +10,8 @@ export default async function storyboard({ page, rec, tap, siteUrl, maxSeconds }
   await rec.sleep(2500);
   await rec.region('stage', 60, 440, 1800, 1012, { pad: 0, kmax: 1.08 }, 'Robot + decision stack');
 
-  await tap(page.locator('.play-button'));                                  // tap, never click(): click() scrolls
-  rec.note('play');
+  await rec.tap(page.locator('.play-button'), { key: 'play' });             // the real mouse under a pointer the video shows; never click(): it scrolls
+                                                                            // anchor a beat to it with "at": "tap:play"
 
   // Event-driven shots: poll the UI for state changes and cut to the panel that changed.
   const started = rec.now();

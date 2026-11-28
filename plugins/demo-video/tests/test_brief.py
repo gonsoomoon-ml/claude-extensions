@@ -340,3 +340,12 @@ def test_a_caption_row_over_several_views_keeps_each_views_text_in_order(tmp_pat
     take.with_name("take.frametext.txt").write_text(texts + "== 11.90 leave c\nC-RESULT\n", encoding="utf-8")
     report, _ = brief(tmp_path, take, "--script", script)
     assert report["rows"][0]["text_end"] == "C-RESULT" and report["rows"][0]["texts"][-1]["text"] == "C"
+
+
+@needs_ffmpeg
+def test_a_rows_notes_say_what_was_pressed(tmp_path):
+    """1.6.0: a camlog entry's key, label and text (a tap's) ride along in the row's notes."""
+    log = [LOG[0], {"t": 3.0, "kind": "tap", "key": "deploy", "label": "the deploy button", "text": "배포", "rect": [1, 2, 3, 4], "point": [2, 4]}, LOG[3]]
+    report, _ = brief(tmp_path, make_take(tmp_path / "take.webm", log=log, texts=None))
+    assert report["rows"][0]["notes"] == [{"kind": "tap", "t": 3.0, "key": "deploy", "label": "the deploy button", "text": "배포"},
+                                          {"kind": "play", "t": 6.0}]

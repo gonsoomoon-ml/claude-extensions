@@ -869,7 +869,8 @@ def _marks_and_notes(log: list[dict], texts: list[dict], holds) -> tuple[list[di
                          and abs(x["t"] - float(e["t"])) <= NEAR), None)
             marks.append({k: v for k, v in (("key", e.get("key")), ("label", e.get("label")), ("text", text)) if v is not None})
         else:
-            notes.append({"kind": e["kind"], "t": float(e["t"])})
+            # what a press pressed rides along: a tap's key, label and the element's own text
+            notes.append({"kind": e["kind"], "t": float(e["t"]), **{k: e[k] for k in ("key", "label", "text") if e.get(k) is not None}})
     return marks, notes
 
 
