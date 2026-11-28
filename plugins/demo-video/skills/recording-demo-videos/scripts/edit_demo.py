@@ -262,6 +262,12 @@ def drawbox(rect, *, start: float, end: float) -> list[str]:
             f"drawbox=x={x}:y={y}:w={w}:h={h}:color={HIGHLIGHT}:t={HIGHLIGHT_THICK}:{enable}"]
 
 
+def caption_floor(title, speed: float) -> float:
+    """The earliest second of a clip a caption may start at: after the title card (4.4 s) when the clip has a title,
+    0.2 s into a clip played at real time without one, else the clip's first frame. check_demo.py brief uses it too."""
+    return 4.4 if title else 0.2 if speed == 1 else 0.0
+
+
 def beat_layout(beats: list[dict], log: list[dict], *, start: float, end: float, speed: float, title) -> list[dict]:
     """When and where each beat of a script shows in its clip, checked before ffmpeg starts.
 
@@ -287,7 +293,7 @@ def beat_layout(beats: list[dict], log: list[dict], *, start: float, end: float,
     moves = camera_moves(log)
     layout = []
     for i, (t0, b) in enumerate(timed):
-        t0 = max(t0, 4.4 if title else 0.2 if speed == 1 else 0.0)  # never under the title card
+        t0 = max(t0, caption_floor(title, speed))  # never under the title card
         nxt = timed[i + 1][0] if i + 1 < len(timed) else rel(end)
         dur = float(b.get("dur", min(7.0, nxt - t0 - 0.3)))
         t1 = rel(end) if b.get("hold") else min(t0 + max(dur, 1.5), rel(end) - 0.1)

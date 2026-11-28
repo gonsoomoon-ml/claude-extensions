@@ -66,7 +66,7 @@ A beat can point at what its sentence is about. The frame stays untouched; a red
 
 A box may not lie under the caption, and may not show while the camera moves: from a shot's time until the camera stops (1.4 s, or the shot's own `dur`), whatever the beat is anchored to; a shot that leaves the camera where it was is no move. The clip step stops with a message that says when the camera stops. If the box would start during the move, it names the `"box_delay"` that starts the box after the stop, or, when the caption ends before the camera stops, says to anchor the beat later or lengthen the caption. If the move starts while the box shows, it says to shorten the caption (the `"box_dur"`, when the beat has one) or move the box, and adds the `"box_delay"` when a delay can pass before the caption ends. The default delay of a `shot:` anchor waits for a move of the default length; a shot recorded with a longer move of its own is refused until you give a longer `"box_delay"`. A held caption stays to the end of the clip, so on a clip whose camera moves on, give the box a `box_dur` that ends before the move. One caption has one time for its boxes: to point at two things one after the other, write two beats. Rules, refusals and a worked `box_dur` are in [voice-and-highlight.md](voice-and-highlight.md).
 
-A beat that is narrated is written for the ear as well: the narration line (one per beat or per card, see [voice-and-highlight.md](voice-and-highlight.md)) says only what the frames show while it plays, and the caption stays as it is.
+A beat that is narrated is written for the ear as well: the narration line (one per beat or per card) is written from the caption rows of `brief --script`, says only what the frames show while it plays, and the caption stays as it is ([voice-and-highlight.md](voice-and-highlight.md), section 3).
 
 4–15 beats per clip at 1× is a normal density; a short sped-up piece may carry a single beat. Format and anchor forms: `python3 scripts/edit_demo.py --help`.
 
@@ -92,4 +92,4 @@ Card line kinds: `kicker`, `title`, `row`, `gap`; colours `fg` (default), `dim`,
 1. Intro card and summary card first: the message and the take home messages exist end to end before any footage.
 2. Chapter list with title, subtitle and the take that will show it.
 3. Storyboard and recording.
-4. Beats per chapter, written from the camlog and the stills, then the check that each insight beat is a row on the summary card.
+4. `python3 scripts/check_demo.py brief raw/<stem>.webm --out brief/<stem>/`, then the beats per chapter, written from its rows: the frame's text for names and numbers, the stills for what happened. Then the check that each insight beat is a row on the summary card.

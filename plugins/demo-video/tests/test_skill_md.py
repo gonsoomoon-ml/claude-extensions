@@ -194,18 +194,33 @@ def test_the_readme_states_the_one_new_requirement_and_the_origin():
     assert "2026-11-24" in readme and "check_demo.py" in readme
 
 
-def test_the_version_is_1_4_0_wherever_it_is_written():
+def test_the_version_is_1_5_0_wherever_it_is_written():
     """The version lives in plugin.json only; CHANGELOG.md, the marketplace entry and the README's origin section name the release."""
     plugin = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text())
-    assert plugin["version"] == "1.4.0"
+    assert plugin["version"] == "1.5.0"
     assert "CHANGELOG.md" in plugin["description"] and " adds " not in plugin["description"], "the history lives in CHANGELOG.md, not the description"
     changelog = (PLUGIN / "CHANGELOG.md").read_text()
-    for release in ("1.4.0 (2026-11-24)", "1.3.0 (2026-11-09)", "1.2.0 (2026-11-09)"):
+    for release in ("1.5.0 (2026-11-28)", "1.4.0 (2026-11-24)", "1.3.0 (2026-11-09)", "1.2.0 (2026-11-09)"):
         assert f"## {release}" in changelog, f"CHANGELOG.md has no section for {release}"
     market = json.loads((PLUGIN.parents[1] / ".claude-plugin" / "marketplace.json").read_text())
     entry = next(p for p in market["plugins"] if p["name"] == "demo-video")
-    assert "version" not in entry and entry["description"].rstrip().endswith("1.4.0.")
+    assert "version" not in entry and entry["description"].rstrip().endswith("1.5.0.")
     assert market["metadata"]["version"] == "1.0.0", "the marketplace's own version stays"
-    assert "1.3.0." not in entry["description"]
-    assert re.search(r"^- 1\.4\.0 \(2026-11-24", README_MD.read_text(), re.M), "the README's origin section names the release"
+    assert "1.3.0." not in entry["description"] and "1.4.0." not in entry["description"]
+    readme = README_MD.read_text()
+    for line in (r"^- 1\.5\.0 \(2026-11-28", r"^- 1\.4\.0 \(2026-11-24"):
+        assert re.search(line, readme, re.M), "the README's origin section names each release"
     assert "version" not in frontmatter(), "the skill's frontmatter carries no version"
+
+
+def test_the_documents_teach_writing_from_the_take():
+    """1.5.0: the recorder keeps each frame's text and `brief` turns a take into rows to write from."""
+    skill, ref, script = SKILL_MD.read_text(), REFERENCE_MD.read_text(), SCRIPT_MD.read_text()
+    assert "python3 scripts/check_demo.py brief" in skill and "--every" in skill and "rec.text" in skill
+    for must in ("python3 scripts/check_demo.py brief", "--script", "--every", "--voices", "--rate", "--speed",
+                 ".frametext.txt", "rec.text", '`"budget"`', '`"live"`', '`"text_end"`', '`"texts"`', '`"stills"`',
+                 "iframe", "canvas", "password"):
+        assert must in ref, f"voice-and-highlight.md does not name {must!r}"
+    assert "check_demo.py brief" in script, "script.md's working order writes the beats from the brief"
+    readme = README_MD.read_text()
+    assert "check_demo.py brief" in readme and "frametext" in readme

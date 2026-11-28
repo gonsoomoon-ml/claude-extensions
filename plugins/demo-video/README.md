@@ -74,7 +74,8 @@ python3 $S/scripts/edit_demo.py reel reel.json --out reel.mp4
 | 단계 | 도구 | 산출물 |
 |---|---|---|
 | 대본 | `references/script.md` 순서로 직접 작성 | 인트로 카드(전달하는 메시지, 간지 카드가 있으면 3초 제목만), 챕터와 간지 카드, 챕터별 자막(그 기능이 사용자에게 무엇을 해 주는지, 합니다체 45자 이내), 정리 카드(take home messages) |
-| 녹화 | `node scripts/record_demo.mjs --url … --storyboard storyboard.mjs` | `raw/<stem>.webm` + `raw/<stem>.camlog.json`. 기본 1920x1080, 한 화면에 다 들어오는 UI는 `--layout 1280x720`으로 1.5배 확대 녹화 |
+| 녹화 | `node scripts/record_demo.mjs --url … --storyboard storyboard.mjs` | `raw/<stem>.webm` + `raw/<stem>.camlog.json` + `raw/<stem>.frametext.txt`(샷마다 프레임에 보인 글). 기본 1920x1080, 한 화면에 다 들어오는 UI는 `--layout 1280x720`으로 1.5배 확대 녹화 |
+| 작성용 표 | `python3 scripts/check_demo.py brief raw/<stem>.webm --out brief/<stem>/` | `brief.json`과 스틸. 샷마다(자막 스크립트를 `--script`로 주면 자막마다) 프레임의 글, 길이, 내레이션 글자 수 기준, 화면이 아직 움직이는지를 한 줄로 담습니다. 자막과 내레이션은 이 표를 보고 씁니다 |
 | 클립 | `python3 scripts/edit_demo.py clip raw/<stem>.webm --script scripts/<stem>.json` | `clips/<stem>.mp4` 1080p30, 타이틀 카드와 자막(흰 굵은 글씨 + 파란 상자 한 가지), 기본 1.25배속, 대기 구간은 `speed: 4` |
 | 카드 | `python3 scripts/make_cards.py cards.json --out clips` | 인트로, 간지, 정리 카드 mp4와 PNG 미리보기 |
 | 릴 | `python3 scripts/edit_demo.py reel reel.json --out reel.mp4` | 인트로 카드, 챕터, 정리 카드 순서의 한 영상. 이어 붙인 뒤 한 번 더 재인코딩한 단일 스트림(High 4.1, 3 Mbit/s 상한) 파일 하나 |
@@ -138,7 +139,7 @@ ln -s "$PWD/claude-extensions/plugins/demo-video/skills/recording-demo-videos" ~
 - [SKILL.md](skills/recording-demo-videos/SKILL.md): 9단계 파이프라인, 터미널 장면, 빠른 참조, 흔한 실수
 - [references/script.md](skills/recording-demo-videos/references/script.md): 인트로 카드, 챕터와 간지, 자막 문장 규칙, 정리 카드, `cards.json` 형식
 - [references/reel-manifest.md](skills/recording-demo-videos/references/reel-manifest.md): 릴 매니페스트 형식, 구간별 `fade_in`/`fade_out`, 단일 스트림 재인코딩, 내레이션 릴의 필드
-- [references/voice-and-highlight.md](skills/recording-demo-videos/references/voice-and-highlight.md): 강조 상자와 붙든 자막, `voice`, 내레이션 릴의 일정 규칙, `check_demo.py`의 `audit`, `boxes`, `sheet`, 검사가 못 보는 것
+- [references/voice-and-highlight.md](skills/recording-demo-videos/references/voice-and-highlight.md): 강조 상자와 붙든 자막, 녹화에서 쓰기(프레임의 글, `brief`의 줄과 글자 수 기준), `voice`, 내레이션 릴의 일정 규칙, `check_demo.py`의 `audit`, `boxes`, `sheet`, 검사가 못 보는 것
 - `scripts/storyboard.example.mjs`: 웹 UI 스토리보드 예시(고정 대기와 이벤트 감지 루프)
 - `scripts/terminal.example.mjs` + `scripts/term.mjs`: 터미널 스토리보드 예시와 도우미
 
@@ -149,7 +150,7 @@ cd plugins/demo-video && python3 -m pytest tests -q
 PLAYWRIGHT_ROOT=<node_modules/playwright가 있는 디렉터리> python3 -m pytest tests -q   # --layout 녹화 스모크 테스트 포함
 ```
 
-ffmpeg가 있어야 합니다. 앵커 계산, 기본 배속, 구간별 페이드, 해상도 검사, 임시 파일 정리, 상자와 붙든 자막, 음성 합성(가짜 `aws`를 PATH 앞에 두고 AWS는 부르지 않음), 내레이션 릴과 검사, 문서 규칙을 확인합니다.
+ffmpeg가 있어야 합니다. 앵커 계산, 기본 배속, 구간별 페이드, 해상도 검사, 임시 파일 정리, 상자와 붙든 자막, 음성 합성(가짜 `aws`를 PATH 앞에 두고 AWS는 부르지 않음), 내레이션 릴과 검사, 프레임의 글과 작성용 표(`brief`), 문서 규칙을 확인합니다.
 
 ## 출처
 
@@ -158,3 +159,4 @@ hi-space 의 [hi-aws-skills](https://github.com/hi-space/hi-aws-skills) `plugins
 - 1.2.0 (2026-11-09): 원본 그대로 가져왔습니다.
 - 1.3.0 (2026-11-09): 자막 한 가지 모양, 단일 스트림 릴, 한글 글꼴 폴백, 터미널 장면(`term.mjs`)을 넣었습니다.
 - 1.4.0 (2026-11-24): 강조 상자, 붙든 자막, 내레이션 릴, 검사(`check_demo.py`)를 넣었습니다.
+- 1.5.0 (2026-11-28): 녹화가 프레임의 글을 남기고, 그 글과 스틸로 자막과 내레이션을 쓰는 표(`brief`)를 넣었습니다.

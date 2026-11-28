@@ -9,6 +9,11 @@
  * "rect": [x, y, w, h], where its target lies on the 1920x1080 frame once the camera has stopped (integers,
  * clipped to the frame, none when the target lies wholly outside it); rec.mark(key, selector, label) writes a
  * "mark" entry with the same rect for an element, without moving the camera.
+ * Also <out>/<name>.frametext.txt (1.5.0): the text each frame showed, in the format of frametext.mjs. One entry per
+ * shot (the frame once the camera has stopped), one for the view a shot leaves when it changed since ("leave": results
+ * arrive after a shot, not with it), one per mark (the element's own text) and one per `await rec.text(key)` (the frame
+ * now: for a screen that changes while the camera stays). check_demo.py brief reads it. Only what the frame shows is
+ * kept: not text scrolled out of an overflow box, not hidden elements, never a password field's value.
  *
  * The camera is a CSS transform on <body> (scale + translate, 1.4 s eased transition) applied while
  * Playwright records the full 1920x1080 viewport. Cropping the recording afterwards is blurry; the
@@ -24,6 +29,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
+import { formatFrametext } from './frametext.mjs';
 
 const argv = process.argv.slice(2);
 const option = (name, fallback) => { const i = argv.indexOf(name); return i < 0 ? fallback : argv[i + 1]; };
@@ -78,8 +84,8 @@ const CAMERA_JS = `
   // A client rect (visual px, as getBoundingClientRect gives it) in untransformed page coordinates: invert the current
   // body transform and fold in scroll, otherwise the second shot measures a rect that is already scaled by the first.
   // In the camera's model (what it aims with, as measured); onPage: where the rectangle truly lies on the page.
-  const fromClient = (r, onPage = false) => {
-    const sx = window.scrollX / Z, sy = window.scrollY / Z, t = new DOMMatrix(getComputedStyle(document.body).transform);
+  const fromClient = (r, onPage = false, t = new DOMMatrix(getComputedStyle(document.body).transform)) => {
+    const sx = window.scrollX / Z, sy = window.scrollY / Z;
     const m = t.inverse(), o = onPage ? origin(t) : { x: 0, y: 0 };
     const un = (px, py) => { const p = m.transformPoint(new DOMPoint(px / Z + sx - o.x, py / Z + sy - o.y)); return [p.x + o.x, p.y + o.y]; };
     let [x0, y0] = un(r.left, r.top), [x1, y1] = un(r.right, r.bottom);
@@ -142,18 +148,124 @@ const CAMERA_JS = `
     return !r || r.w < 2 || r.h < 2 ? { found: false } : { found: true, rect: frameRect(r) };
   };
   const rect = selector => { const el = document.querySelector(selector); return el ? untransformed(el) : null; };
-  window.__cam = { focus, region, reset, rect, apply, state, pageSize, frameRect, targetRect, lastMove, mark, fromClient };
+  // ---- the text the frame shows (1.5.0)
+  const collapse = s => s.replace(/\\s+/g, ' ');
+  const NO_VALUE = ['password', 'hidden', 'checkbox', 'radio', 'file', 'button', 'submit', 'reset', 'image', 'color', 'range'];
+  // What a form field shows: its value (a select: the chosen option's text). A password field's value is never read.
+  const fieldValue = el => {
+    if (el.tagName === 'SELECT') return el.selectedOptions[0] ? el.selectedOptions[0].textContent : '';
+    if (el.tagName === 'INPUT' && NO_VALUE.includes((el.getAttribute('type') || 'text').toLowerCase())) return '';
+    return el.value || '';
+  };
+  // The text of what lies in the frame once the camera has stopped, in reading order, one line per row of the screen.
+  // A piece is a text node (or a form field's value) with the place of its first line box that the frame shows; a box
+  // cut away by an overflow ancestor is not shown. <html> and <body> are no such ancestors: the camera's own style
+  // hides <html>'s overflow, and the frame is what the camera brings into it. An overflow box cuts only what is laid
+  // out in it: an absolutely or fixedly positioned element (a popover, a dropdown, a dialog) is laid out in the
+  // ancestor it is positioned against, and shows outside an overflow parent that lies between the two.
+  const frameText = () => {
+    const t = new DOMMatrix(getComputedStyle(document.body).transform), o = origin(t);
+    const shown = new Map(), clips = new Map();
+    const visible = el => {
+      let v = shown.get(el);
+      if (v === undefined) shown.set(el, v = el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true, opacityProperty: true, visibilityProperty: true }));
+      return v;
+    };
+    const positions = (a, fixed) => {   // a is what an absolutely (fixed: fixedly) positioned descendant is positioned against
+      const cs = getComputedStyle(a);
+      return (!fixed && cs.position !== 'static') || cs.transform !== 'none' || cs.perspective !== 'none' || cs.filter !== 'none'
+        || /transform|perspective|filter/.test(cs.willChange) || /paint|layout|strict|content/.test(cs.contain);
+    };
+    const laidOutIn = (el, position) => {   // the element whose overflow cuts el: its parent, or what it is positioned against
+      if (position !== 'absolute' && position !== 'fixed') return el.parentElement;
+      for (let a = el.parentElement; a && a !== document.body && a !== document.documentElement; a = a.parentElement) {
+        if (positions(a, position === 'fixed')) return a;
+      }
+      return null;   // the page itself
+    };
+    const clipOf = el => {   // the client box everything inside el is cut to; null: not cut
+      if (!el || el === document.body || el === document.documentElement) return null;
+      if (clips.has(el)) return clips.get(el);
+      const cs = getComputedStyle(el);
+      let box = clipOf(laidOutIn(el, cs.position));
+      if (cs.overflowX !== 'visible' || cs.overflowY !== 'visible') {
+        const r = el.getBoundingClientRect();
+        box = box ? { left: Math.max(box.left, r.left), top: Math.max(box.top, r.top), right: Math.min(box.right, r.right), bottom: Math.min(box.bottom, r.bottom) }
+                  : { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+      }
+      clips.set(el, box);
+      return box;
+    };
+    const place = (r, box) => {   // a client rect, cut to box, as the frame at rest shows it: [x, y, w, h] or null
+      const c = box ? { left: Math.max(r.left, box.left), top: Math.max(r.top, box.top), right: Math.min(r.right, box.right), bottom: Math.min(r.bottom, box.bottom) } : r;
+      return c.right - c.left < 0.5 || c.bottom - c.top < 0.5 ? null : frameRect(fromClient(c, true, t), o);
+    };
+    const pieces = [];
+    const add = (f, s) => pieces.push({ x: f[0], y: f[1], w: f[2], h: f[3], s });
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT), range = document.createRange();
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const el = node.parentElement;
+      if (!el || !node.data.trim() || el.closest('script,style,noscript,template,textarea,select') || !visible(el)) continue;
+      const box = clipOf(el);
+      range.selectNodeContents(node);
+      for (const r of range.getClientRects()) {
+        const f = place(r, box);
+        if (f) { add(f, collapse(node.data)); break; }
+      }
+    }
+    for (const el of document.querySelectorAll('input, textarea, select')) {
+      const value = collapse(fieldValue(el)).trim();
+      if (!value || !visible(el)) continue;
+      const f = place(el.getBoundingClientRect(), clipOf(el.parentElement));
+      if (f) add(f, value);
+    }
+    pieces.sort((a, b) => a.y - b.y || a.x - b.x);
+    const rows = [];
+    for (const p of pieces) {   // one row: pieces that share more than half the lower one's height (a big number between small labels)
+      const row = rows[rows.length - 1];
+      if (row && Math.min(row.y + row.h, p.y + p.h) - Math.max(row.y, p.y) > Math.min(p.h, row.h) / 2) row.items.push(p);
+      else rows.push({ y: p.y, h: p.h, items: [p] });
+    }
+    // within a row, pieces that touch are one run of text (a terminal row is many spans); pieces apart get a space
+    return rows.map(row => collapse(row.items.sort((a, b) => a.x - b.x).reduce((line, p, i, all) =>
+      i ? line + (p.x - (all[i - 1].x + all[i - 1].w) < 0.3 * Math.min(p.h, all[i - 1].h) ? '' : ' ') + p.s : p.s, '')).trim())
+      .filter(Boolean).join('\\n');
+  };
+  // An element's own text (a form field: its value), each line trimmed, empty lines dropped; null when nothing matches.
+  const elementText = (selector, index = 0) => {
+    const el = document.querySelectorAll(selector)[index];
+    if (!el) return null;
+    const own = ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) ? fieldValue(el) : (el.innerText ?? el.textContent ?? '');
+    return own.split('\\n').map(line => collapse(line).trim()).filter(Boolean).join('\\n');
+  };
+  window.__cam = { focus, region, reset, rect, apply, state, pageSize, frameRect, targetRect, lastMove, mark, fromClient, frameText, elementText };
 })();`;
 
 // Playwright's click()/fill() scroll the target into view, which fights the camera transform. Dispatch instead.
 const tap = async locator => { await locator.first().waitFor({ state: 'visible' }); await locator.first().dispatchEvent('click'); };
 
 class Recorder {
-  constructor(page, name) { this.page = page; this.name = name; this.log = []; this.t0 = Date.now(); this.lastShot = 0; this.lastKey = ''; }
+  constructor(page, name) { this.page = page; this.name = name; this.log = []; this.t0 = Date.now(); this.lastShot = 0; this.lastKey = ''; this.texts = []; this.lastText = null; }
+  /** The text the frame shows (window.__cam.frameText); null when the page has no camera (before install, after a
+   *  reload) or cannot be read now. A capture that fails adds nothing and stops nothing. */
+  async frameText() { return this.page.evaluate('window.__cam.frameText()').then(v => (typeof v === 'string' ? v : null), () => null); }
+  keep(kind, key, text, t = this.now()) { this.texts.push({ t: +t.toFixed(2), kind, key, text }); }
+  /** Keep the text the frame shows now, under `key` (a "text" entry of <name>.frametext.txt). For a screen that
+   *  changes while the camera stays: a result that arrived, a terminal that printed. Returns the text, or null. */
+  async text(key) {
+    const text = await this.frameText();
+    if (text !== null) { this.keep('text', key, text); this.lastText = text; }
+    return text;
+  }
   now() { return (Date.now() - this.t0) / 1000; }
   note(kind, data = {}, t = this.now()) { this.log.push({ t: +t.toFixed(2), kind, ...data }); }
   async install() { await this.page.evaluate(CAMERA_JS); }
   async shot(key, fn, label) {
+    // the view this shot leaves, as it is just before the camera moves on: results arrive after a shot, not with it
+    if (this.lastKey !== '') {
+      const left = await this.frameText();
+      if (left !== null && left !== this.lastText) { this.keep('leave', this.lastKey, left); this.lastText = left; }
+    }
     const result = await this.page.evaluate(fn).catch(error => ({ error: String(error) }));
     const t = this.lastShot = this.now(); this.lastKey = key;
     // null = selector matched nothing (or a 0-size element): the camera did not move. Say so loudly; a silent
@@ -168,6 +280,8 @@ class Recorder {
                         ...(missing ? { missing: true } : {}) }, t);
     if (missing) console.warn(`[${this.now().toFixed(1)}s] shot ${key}: selector matched nothing, camera unchanged`);
     else console.log(`[${this.now().toFixed(1)}s] shot ${key}${label ? ' — ' + label : ''}`);
+    const text = await this.frameText();   // what the frame shows once the camera has stopped, under the shot's own time
+    if (text !== null) { this.keep('shot', key, text, t); this.lastText = text; }
     return result;
   }
   /** Zoom to fit an element. opts: pad (px), kmax (zoom cap), index, anchorTop, dur (s). label → caption. */
@@ -182,13 +296,16 @@ class Recorder {
     const found = await this.page.evaluate(`window.__cam.mark(${JSON.stringify(selector)}, ${Number(index)})`)
       .catch(error => ({ error: String(error).split('\n')[0] }));
     if (found?.error) return this.markRect(key, null, label, `selector ${selector}: ${found.error}`, found.error);
-    return this.markRect(key, found?.found ? found.rect ?? undefined : null, label, `selector ${selector} matched nothing`);
+    const text = found?.found
+      ? await this.page.evaluate(`window.__cam.elementText(${JSON.stringify(selector)}, ${Number(index)})`).catch(() => null) : null;
+    return this.markRect(key, found?.found ? found.rect ?? undefined : null, label, `selector ${selector} matched nothing`, undefined, text);
   }
   /** The same for a rectangle already in frame pixels (term.mjs markRows). rect null: nothing to mark; error: the
-   *  browser's words, kept in the entry. */
-  async markRect(key, rect, label, whyMissing = 'nothing to mark', error) {
-    const missing = rect === null;
-    this.note('mark', { key, label, ...(rect ? { rect } : {}), ...(missing ? { missing: true } : {}), ...(error ? { error } : {}) });
+   *  browser's words, kept in the entry; text: the marked thing's own text, kept as a "mark" entry of the frame text. */
+  async markRect(key, rect, label, whyMissing = 'nothing to mark', error, text) {
+    const missing = rect === null, t = this.now();
+    this.note('mark', { key, label, ...(rect ? { rect } : {}), ...(missing ? { missing: true } : {}), ...(error ? { error } : {}) }, t);
+    if (!missing && typeof text === 'string') this.keep('mark', key, text, t);
     if (missing) console.warn(`[${this.now().toFixed(1)}s] mark ${key}: ${whyMissing}`);
     else console.log(`[${this.now().toFixed(1)}s] mark ${key}${label ? ' — ' + label : ''}`);
     return missing ? null : rect;
@@ -223,6 +340,7 @@ try {
   const target = path.join(outDir, `${name}.webm`);
   await fs.copyFile(recorded, target);
   await fs.unlink(recorded).catch(() => {});
+  await fs.writeFile(path.join(outDir, `${name}.frametext.txt`), formatFrametext(rec.texts));
   await fs.writeFile(path.join(outDir, `${name}.camlog.json`), JSON.stringify({ name, url: siteUrl, layout, ok, errors, duration_s: rec.now(), log: rec.log }, null, 2));
   await browser.close();
   console.log(JSON.stringify({ video: target, ok, seconds: rec.now(), errors: errors.length }));

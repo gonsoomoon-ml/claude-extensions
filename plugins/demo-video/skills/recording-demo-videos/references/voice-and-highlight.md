@@ -4,12 +4,13 @@ What each part does, in the order you use it. The commands and fields were run o
 
 1. [Say where things are (recorder)](#1-say-where-things-are-recorder)
 2. [Boxes and held captions in a clip script](#2-boxes-and-held-captions-in-a-clip-script)
-3. [Narration lines and `voice`](#3-narration-lines-and-voice)
-4. [A narrated reel](#4-a-narrated-reel)
-5. [The checks](#5-the-checks)
-6. [What the checks cannot see, and other limits](#6-what-the-checks-cannot-see-and-other-limits)
+3. [Write from the take: frame text and `brief`](#3-write-from-the-take-frame-text-and-brief)
+4. [Narration lines and `voice`](#4-narration-lines-and-voice)
+5. [A narrated reel](#5-a-narrated-reel)
+6. [The checks](#6-the-checks)
+7. [What the checks cannot see, and other limits](#7-what-the-checks-cannot-see-and-other-limits)
 
-Workflow in one line: lines (text) → `voice` → clips with `hold` → reel manifest with `voice`, `voice_at`, `group` and picture segments → `reel` → `check_demo.py audit`, `boxes`, `sheet` → listen on `review.html`.
+Workflow in one line: take → `brief` → lines (text) → `voice` → clips with `hold` → reel manifest with `voice`, `voice_at`, `group` and picture segments → `reel` → `check_demo.py audit`, `boxes`, `sheet` → listen on `review.html`.
 
 ## 1. Say where things are (recorder)
 
@@ -70,7 +71,80 @@ Worked example, stand-in names: the script has `start` 3.5 and no title, `speed`
 
 A script that uses a box or a hold makes `clip` print, on stderr, each caption's and box's time in the finished clip, one line per beat: `clip: beat 2: caption 6.00-10.00 s, box 6.50-10.00 s: 'held'`. A script without them prints what it printed before.
 
-## 3. Narration lines and `voice`
+## 3. Write from the take: frame text and `brief`
+
+Captions and narration lines are written after the take, from what it recorded. What the video says (cards, chapter titles) is still decided before recording ([script.md](script.md)); the take supplies the facts.
+
+### What the recorder keeps
+
+Beside the camlog, `record_demo.mjs` writes `<name>.frametext.txt`: the text the frame showed, one entry per capture. An entry is a header line, `== <seconds of the take> <kind> <key>`, and the text's lines.
+
+| When | Kind | Text |
+|---|---|---|
+| a shot (`rec.focus`, `rec.region`, `rec.reset`, `rec.shot`) | `shot`, under the shot's key and time | what the frame shows once the camera has stopped |
+| the next shot, just before it moves the camera | `leave`, under the key of the view it leaves | that view as it is then; written only when it differs from the last capture, because a result arrives after a shot, not with it |
+| `rec.mark`, `markRows` | `mark`, under the mark's key and time | the marked element's (or rows') own text |
+| `await rec.text('<key>')` | `text` | what the frame shows now, for a screen that changes while the camera stays (an event-probe loop, a terminal session) |
+
+"What the frame shows" is the text of the visible elements that have a line inside the frame at rest, plus the values of form fields, in reading order: rows top to bottom, pieces that touch joined, pieces apart given a space. Each line is first cut to the `overflow` boxes around it, so a row scrolled out of a panel is not kept. A capture holds at most 20,000 characters and then ends with the line `[cut]`. One capture took 14 ms on a page of 3,000 text nodes (measured 2026-11-28); the `leave` capture runs before the camera moves, the shot's camlog time is still taken after the camera call.
+
+Limits:
+
+- a paragraph that is only partly in the frame is kept whole;
+- text covered by another element (a page behind a dialog) is kept;
+- text inside a picture, a `canvas`, an `iframe` or a shadow root is not read: write such rows from the stills;
+- the value of a `type="password"` field is never read;
+- text that arrives after a capture is missing until the next `leave` or `rec.text`;
+- a capture needs the camera on the page: before `rec.install()`, and after a reload until it is installed again, nothing is kept and nothing stops.
+
+The file is the take's content as text: keep it where the take is kept. The recorder never writes a `<name>.texts.txt`; a storyboard that keeps such a file of its own keeps it.
+
+### `brief`: the take as rows
+
+```
+python3 scripts/check_demo.py brief raw/<stem>.webm --out brief/<stem>/ [--script scripts/<stem>.1.json …]
+          [--speed 1.25] [--voices voice/voice.json] [--rate 7.6] [--every 5]
+```
+
+It writes `<out>/brief.json` and stills (JPEG, 1920×1080), reads its inputs only, and prints one JSON line (the number of rows, of stills and of live rows, and the rate). A run removes its own earlier stills from `--out` and nothing else.
+
+| Called | One row | Use |
+|---|---|---|
+| on a take, without `--script` | per view: a camlog shot to the next one | write the beats |
+| with `--script`: one or more scripts cut from this take, those of one run of the reel | per caption | write one narration line per caption |
+| on a recording without a camlog (a `.mov`), without `--script` | every `--every` seconds (5) | find where the screen changes |
+
+With `--script` a row starts where its caption starts (the clip step's own times; a script the clip step refuses stops `brief` with the same line, before `--out` is touched). The row runs over the rest of its clip and over every following clip that has no caption, as a voice runs on over the later segments of its `group`. It ends where the reel would hold its last frame: at the next caption when that is in the same script, else where the next script with a caption starts. A script without a caption that comes before the first caption is in no row (stderr names it). Two scripts that cover the same seconds of the take stop the command.
+
+| Field | Meaning |
+|---|---|
+| `"row"` | 1, 2, … |
+| `"key"`, `"label"` | per view: the shot's |
+| `"script"`, `"beat"`, `"caption"` | per caption: the script's stem, the beat's number in it, the caption |
+| `"raw"` | the take's seconds, `[start, end]`; one pair per clip, `[[start, end], …]`, when the row runs over several |
+| `"seconds"` | seconds of the finished clip: each piece at its script's speed, or at `--speed` without scripts |
+| `"budget"` | the characters of narration that fit: `(seconds − 0.3 − voice_gap) × rate`, rounded down |
+| `"live"` | `true`: the picture still changes in the row's last second (the take's frames 1.0 s and 0.2 s before its end differ); `false`: it stands still; `null`: not measured, because the camera moves in that second or the row's last piece is shorter than 1.0 s |
+| `"text"` | the frame's text as the row starts |
+| `"text_end"` | the frame's text as the camera leaves the row's last view (`leave`), when it differs |
+| `"texts"` | what `rec.text` kept inside the row; per caption everything kept later in the row, in the take's order: each following view's text as the camera arrives and as it leaves |
+| `"marks"`, `"notes"` | the camlog's marks, with their text, and its other entries inside the row |
+| `"stills"` | three file names: after the camera stops (per caption: half a clip second after the caption), the middle, 0.2 s before the end; one per row with `--every` |
+
+The budget: 0.3 s is the lead from a caption to its voice, `voice_gap` (0.6 s) the reel's silence between two voices. The rate is the spoken characters a second, spaces counted: measured in the `voice.json` that `--voices` names when it has lines, else `--rate`, else 7.6 (7.63 on the 70 Korean lines of a narration synthesized on 2026-11-24). The report says which. A take recorded before the recorder kept frame text gives rows without text, with one line on stderr.
+
+**What `"live"` is for.** A reel holds a row's last frame when its voice outlasts the row. On a `"live": false` row that frame was standing still already: a line over the budget costs nothing a viewer sees. On a `"live": true` row the reel stops a picture that was moving. The budget is information, no command stops on it.
+
+### Writing from the rows
+
+Beats come from the view rows, narration lines from the caption rows:
+
+1. What to say comes from the script (the cards, the chapter titles). The facts come from the row's text and stills.
+2. Names and numbers are spelled as the row's text spells them. One that needs a reading goes into the `--readings` file.
+3. Say what the feature did in this take, usually the result in `"text_end"`, not that a screen opened.
+4. On a `"live": true` row keep the line within `"budget"`. On any other row the limit is the reel's own (section 4).
+
+## 4. Narration lines and `voice`
 
 ```
 python3 scripts/edit_demo.py voice lines.json --out voice/ [--readings readings.json] [--hangul-only]
@@ -88,7 +162,7 @@ python3 scripts/edit_demo.py voice lines.json --out voice/ [--readings readings.
 
 Write each line to be heard together with the frames it plays over: it says only what those frames show. Keep a line under about 14 s (the reel warns above that).
 
-## 4. A narrated reel
+## 5. A narrated reel
 
 End a clip whose last frame the reel will hold with a held caption (`"hold": true` on its last beat), so the held frame keeps its caption, then give the reel manifest ([reel-manifest.md](reel-manifest.md) has the full field list):
 
@@ -114,7 +188,7 @@ End a clip whose last frame the reel will hold with a held caption (`"hold": tru
 - **Output.** `reel.mp4` as before and `reel.voice.json` beside it (it holds the absolute paths of the voice files; keep that in mind before sending the plan file to someone, the review page holds no paths): each segment's measured start, length and hold, each clip segment's `"window"` (the seconds of its clip it shows, from which `sheet` places each box), each voice's measured start and end, and `warnings`. Warnings do not stop the reel: a hold over 6 s, holds over 30 % of the reel, a voice over 14 s, a voice track that one gain brings only near the target (the level reached), and a voice track that has to be compressed. stdout is one line with the reel's length, the number of parts and voices and the seconds held.
 - **Refused before encoding:** a missing file, `start` or `end` outside the clip, two voices on one segment, a `voice_at` outside the segment, a picture without `seconds`, and `--copy` on a manifest with `voice` or `image` (`reel: --copy cannot carry voices or picture segments; leave it out`). A manifest with neither field runs exactly as before.
 
-## 5. The checks
+## 6. The checks
 
 `check_demo.py` reads finished files and never changes them. Each command prints one JSON line.
 
@@ -130,7 +204,7 @@ A flag says "look at this row", not a failure: exit 0 whatever the flags. Exit 1
 
 **`python3 scripts/check_demo.py sheet reel.mp4 --plan reel.voice.json --texts texts.json [--boxes boxes/*.json] --out review/`** writes `index.json`, one JPEG per voice and `review.html`: one file to send as it is. Per voice it shows the reel's frames at start + 0.5 s, the middle and end − 0.2 s, the caption, the narration, the flags and the times, and a play control with the reel's own sound for that voice's window. Each box of the voice's clip (from a boxes report of the same name) whose time that voice's segment shows comes with the reel's frame at the middle of the box's time (of the part the segment shows), an enlarged crop of the box from that frame, what it points at and that time (`box 2: <what> · 2.00 s`): the plan's `"window"` turns the box's time in the clip into reel time. A box whose time a row's segment does not show is left out of that row, so a clip used twice shows a box on each row whose window holds part of the box's time (a box that spans both windows is on both rows); a box on no row is named on stderr (`sheet: box 1 of take.1 (beat 1, 1.40-2.40 s of the clip) lies in no voiced segment's window: it is on no row`). This also happens to a box in a later segment of a narrated group that is cut from the same clip and has no voice of its own: the page does not show it, and the voice plays over it. A plan written before reels recorded the windows still gives a page: every box of a clip on each of its rows, cropped from the voice's middle frame, with one line on stderr that says so; build the reel again to see the boxes at their own times. The page has no script and its only links are the in-page ones from its top list of rows and flagged rows; a flagged row has a red edge. `texts.json` is `{"<name>": {"caption": "…", "say": "…", "what": ["…"], "sources": ["…"]}}`, every field optional (one text in `what` or `sources` is one phrase; `what[i]` goes with the i-th box of the clip's boxes report, the box's number on the page). **The key is the `name` of a voice in the plan file** (`reel.voice.json`), which is the stem of the segment's clip or picture file (`take.1`, `card-intro`), not the name of the line in `lines.json`: copy the keys from the plan. Two voiced segments cut from one clip share a key and so share their texts. A texts key or a boxes report that matches no voice and a voice with no entry are named on stderr, one line each (`sheet: texts key 'intro' matches no voice of the plan (voices: card-intro, take.1)`); the page is still written and the exit code stays 0, with those rows empty. A boxes report whose `box`, `rect`, `clip`, `std`, `redness`, `change` or `flags` is missing or not what `boxes` writes stops the page with one line.
 
-## 6. What the checks cannot see, and other limits
+## 7. What the checks cannot see, and other limits
 
 Each limit stands where its subject is described; this is the list in one place.
 
@@ -147,5 +221,7 @@ Each limit stands where its subject is described; this is the list in one place.
 - A reel whose voice is one quiet line among loud ones keeps that line quiet: one gain lifts the whole track (when the track has to be compressed, the levels shift instead).
 
 ## What was and was not tried
+
+Frame text and `brief` (2026-11-28). Run: the frame text of a test page at `1920x1080` and `--layout 1280x720` (text inside and outside the zoom, a list cut by `overflow`, hidden elements, a text and a password field, terminal rows split into spans, a reload, a storyboard that throws); `brief` on synthetic takes in its three modes; and `brief --script` on 24 real takes with their 78 caption scripts, against the narrated reel made from them. On those takes a line over its budget and a frame held for that line went together for 57 of 60 lines (the other three were within 2 characters of the budget), the budget was on the safe side by a median 0.7 s, and the two rows where the reel had stopped a moving screen were `"live": true`, with six more. Not run: frame text on those real takes (they were recorded before the recorder kept it), a page with an `iframe` or a shadow root, and no video has been made with these rows yet.
 
 Run on 2026-11-24 on synthetic clips and one real take of a small page: `clip` with `box` in three forms, `box_dur` and `hold`; `voice` (its refusals and its cache) with a stand-in `aws` that writes a tone; `reel` with a picture segment, voices and a group; `audit`, `boxes` and `sheet` on that reel. Speech synthesis itself, the AWS permission and `markRows` on a live terminal were not run for this document; they are described from the code and its tests. Also run on 2026-11-24: the held caption and its box on the counted last frame of 84 synthetic clips (25 and 30 fps, three speeds), the camera check on boxes anchored to a shot, a mark, a note and seconds, `sheet` placing each box at its own time on a synthetic reel and on a copy of a real 70-row plan given its windows, and the three ways of the loudness step on tone tracks.

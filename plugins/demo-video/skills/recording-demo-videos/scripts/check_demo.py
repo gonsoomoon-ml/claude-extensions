@@ -4,6 +4,8 @@
   python3 check_demo.py audit reel.mp4 [--plan reel.voice.json] [--tolerance 0.25] [--loudness -16] --out audit.json
   python3 check_demo.py boxes scripts/take.1.json --raw raw/take.webm --out boxes/take.1.json
   python3 check_demo.py sheet reel.mp4 --plan reel.voice.json --texts texts.json [--boxes boxes/*.json] --out review/
+  python3 check_demo.py brief raw/take.webm --out brief/take/ [--script scripts/take.1.json ...] [--speed 1.25]
+                        [--voices voice/voice.json] [--rate 7.6] [--every 5]
 
 audit  The reel's own sound against its plan (<reel stem>.voice.json, written by `edit_demo.py reel`). Speech is found
        with ffmpeg's silencedetect (-35 dB; 0.35 s of silence parts two voices), in the reel and in each voice file:
@@ -36,6 +38,16 @@ sheet  One row per voice of the plan: the finished reel's frames at the voice's 
        <out>/index.json, one JPEG per row and <out>/review.html: one file with every picture and each voice's sound
        inside it, to send as it is. Its top lists every row and the flagged rows as links to the rows (in-page links
        only); a flagged row's card has a red edge.
+brief  What a take shows, for writing its captions and its narration from what was recorded: <out>/brief.json and
+       stills (JPEG, the take's frames at 1920x1080). One row per view (a camlog shot to the next one), or with --script
+       one row per caption, or for a recording without a camlog one row every --every seconds. A row holds its seconds
+       of the take ("raw") and of the finished clip ("seconds"), "budget" (the characters of narration that fit:
+       (seconds - 0.3 - the reel's voice gap) x the speech rate; the rate is measured in --voices' voice.json, else
+       --rate, else 7.6), "live" (the picture still changes in the row's last second: true, false, or null when a camera
+       move or the row's length keeps it from being measured), the frame's text from <take>.frametext.txt (written by
+       record_demo.mjs: "text" as the row starts, "text_end" as the camera leaves, "texts" kept by rec.text, each
+       mark's text) and the camlog's marks and notes inside it. Reads only; a take without frame text gives rows without
+       text, with one line on stderr. A budget is information: nothing stops on it.
 Exit codes: 0 done (audit: passed), 1 a problem or input that cannot be read (a box the clip step would refuse stops
 `boxes` with that step's message), 2 a usage error.
 """
@@ -96,6 +108,36 @@ def _read_json(path: Path, what: str):
 def _write_json(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     edit_demo.write_json_atomic(path, data)
+
+
+# ---------------------------------------------------------------- the frame text a take keeps beside its camlog
+
+FRAMETEXT_KINDS = ("shot", "leave", "mark", "text")
+_FRAMETEXT_HEADER = re.compile(r"== (\d+\.\d{2}) (%s) (\S+)" % "|".join(FRAMETEXT_KINDS))
+
+
+def frametext_key(key) -> str:
+    """A camlog key as frametext.mjs writes it into a header: one token, whitespace runs as _, _ for none."""
+    return re.sub(r"\s+", "_", str(key if key is not None else "").strip()) or "_"
+
+
+def read_frametext(path: Path) -> list[dict]:
+    """The entries of a take's frame-text file (<name>.frametext.txt, written by record_demo.mjs with frametext.mjs),
+    in file order: [{"t": seconds of the take, "kind": shot | leave | mark | text, "key", "text"}]. No file: no entries.
+    A line of the screen that looked like a header was written with one more leading space; that space is taken off."""
+    if not path.is_file():
+        return []
+    entries: list[dict] = []
+    lines: list[str] = []
+    body = path.read_text(encoding="utf-8")
+    for line in body.split("\n")[:-1] if body.endswith("\n") else body.split("\n"):
+        header = _FRAMETEXT_HEADER.fullmatch(line)
+        if header:
+            lines = []
+            entries.append({"t": float(header.group(1)), "kind": header.group(2), "key": header.group(3), "text": lines})
+        elif entries:   # a line before the first header belongs to no capture
+            lines.append(line[1:] if re.match(r" +== ", line) else line)
+    return [{**e, "text": "\n".join(e["text"])} for e in entries]
 
 
 # ---------------------------------------------------------------- audit: speech, lengths, loudness
@@ -388,13 +430,19 @@ def take_frame(raw: Path, t: float) -> Image.Image:
     return _frame(raw, t, f"scale={W}:{H}:flags=lanczos,format=yuv420p")
 
 
-def measure_boxes(script: Path, raw: Path) -> dict:
-    """The `boxes` report of one clip script: per box its rectangle (frame px), its time (raw and clip seconds), what
-    lies under its border and the flags. Both frames are read from the raw take; the clip is never opened."""
+def _clip_script(script: Path) -> tuple[dict, list[dict]]:
+    """A clip script and its beats, or one line that says it is not one."""
     story = _read_json(script, "the clip script")
     beats = (story.get("beats") or []) if isinstance(story, dict) else None
     if not isinstance(beats, list) or not all(isinstance(b, dict) and "at" in b for b in beats):
         raise SystemExit(f"{script} is not a clip script (one JSON object whose \"beats\" each have an \"at\")")
+    return story, beats
+
+
+def measure_boxes(script: Path, raw: Path) -> dict:
+    """The `boxes` report of one clip script: per box its rectangle (frame px), its time (raw and clip seconds), what
+    lies under its border and the flags. Both frames are read from the raw take; the clip is never opened."""
+    story, beats = _clip_script(script)
     take_end = edit_demo.stream_seconds(raw, "v")
     if not take_end:
         raise SystemExit(f"cannot read the take {raw} as a video")
@@ -741,6 +789,260 @@ def build_sheet(reel: Path, plan_path: Path, texts_path: Path, boxes_paths: list
 
 # ---------------------------------------------------------------- command line
 
+# ---------------------------------------------------------------- brief: what a take shows, to write from
+
+BRIEF_LEAD = 0.3              # s from a caption's start to its voice (the lead the reference gives for "voice_at")
+BRIEF_RATE = 7.6              # spoken characters a second, spaces counted (70 narration lines, 2026-11-24: 7.63)
+BRIEF_EVERY = 5.0             # s a row of a recording without a camlog lasts
+LIVE_BEFORE_END = (1.0, 0.2)  # "live" compares the take's frames this long before a row's end
+LIVE_SIZE = (480, 270)        # both frames scaled to this, in grey
+LIVE_LEVELS = 24              # a pixel has changed when it differs by more than this (an encoder flickers by 1 or 2)
+LIVE_PIXELS = 8               # this many changed pixels: the picture moves
+STILL_NAME = re.compile(r"\d{2,}-[abc]\.jpg")   # the stills brief writes, and the only files it removes from --out
+STILL_QUALITY = 85
+STILL_AFTER_MOVE = 0.1        # s after the camera stops that a row's first still is taken
+NEAR = 0.05                   # s within which a frame-text entry and a camlog entry are the same moment
+FRAMES_HELD = 4               # frames of the take held at once (a row's last still is also the later "live" frame)
+
+
+def frametext_path(take: Path) -> Path:
+    """<name>.frametext.txt beside the take (the recorder writes it under the take's own name)."""
+    return take.with_name(take.stem + ".frametext.txt")
+
+
+def speech_rate(voices: Path | None, rate: float | None) -> tuple[float, str]:
+    """The spoken characters a second a budget is counted with, and where the number came from: measured in a
+    voice.json when it holds lines to measure (their "spoken" characters over their "seconds"; a line without both,
+    such as a person's own recording, is left out), else --rate, else BRIEF_RATE."""
+    fallback = (rate, "--rate") if rate is not None else (BRIEF_RATE, "default")
+    if voices is None:
+        return fallback
+    lines = _read_json(voices, "the voice list")
+    spoken = [(len(v["spoken"]), float(v["seconds"])) for v in (lines.values() if isinstance(lines, dict) else [])
+              if isinstance(v, dict) and isinstance(v.get("spoken"), str) and v["spoken"]
+              and isinstance(v.get("seconds"), (int, float)) and v["seconds"] > 0]
+    if not spoken:
+        used = f"--rate {rate:g}" if rate is not None else f"the default rate {BRIEF_RATE:g}"
+        print(f'brief: no line of {voices} has "spoken" text and "seconds": {used} is used', file=sys.stderr)
+        return fallback
+    return round(sum(chars for chars, _ in spoken) / sum(seconds for _, seconds in spoken), 2), str(voices)
+
+
+def budget(seconds: float, rate: float) -> int:
+    """The characters of narration that fit `seconds` of a finished clip: the voice starts BRIEF_LEAD after the caption
+    and the reel keeps its voice gap before the next one."""
+    return math.floor(max(0.0, seconds - BRIEF_LEAD - edit_demo.VOICE_GAP) * rate + 1e-9)
+
+
+def picture_moves(a: Image.Image, b: Image.Image) -> bool:
+    """Two frames differ by more than an encoder's flicker: LIVE_PIXELS or more pixels (at LIVE_SIZE, grey) changed by
+    more than LIVE_LEVELS."""
+    small = [image.convert("L").resize(LIVE_SIZE, Image.BILINEAR) for image in (a, b)]
+    return ImageChops.difference(*small).point(lambda v: 255 if v > LIVE_LEVELS else 0).histogram()[255] >= LIVE_PIXELS
+
+
+def _moves_in(moves, lo: float, hi: float) -> bool:
+    return any(start < hi and stop > lo for _, start, stop in moves)
+
+
+def _live(frame, start: float, end: float, moves) -> bool | None:
+    """Whether the picture still changes as the stretch [start, end] of the take ends: the frames LIVE_BEFORE_END before
+    its end, compared. None when that span begins before the stretch or a camera move lies in it."""
+    a, b = end - LIVE_BEFORE_END[0], end - LIVE_BEFORE_END[1]
+    if a < start - 1e-6 or _moves_in(moves, a, b):
+        return None
+    return picture_moves(frame(a), frame(b))
+
+
+def _inside(t: float, lo: float, hi: float, last: bool) -> bool:
+    """A time on a boundary belongs to the row that starts there; the last row also holds its own end."""
+    return lo <= t < hi or (last and t == hi)
+
+
+def _marks_and_notes(log: list[dict], texts: list[dict], holds) -> tuple[list[dict], list[dict]]:
+    marks, notes = [], []
+    for e in log:
+        if e["kind"] == "shot" or not holds(float(e["t"])):
+            continue
+        if e["kind"] == "mark":
+            text = next((x["text"] for x in texts if x["kind"] == "mark" and x["key"] == frametext_key(e.get("key"))
+                         and abs(x["t"] - float(e["t"])) <= NEAR), None)
+            marks.append({k: v for k, v in (("key", e.get("key")), ("label", e.get("label")), ("text", text)) if v is not None})
+        else:
+            notes.append({"kind": e["kind"], "t": float(e["t"])})
+    return marks, notes
+
+
+def _view_rows(log: list[dict], texts: list[dict], end: float, speed: float, rate: float, frame, still) -> list[dict]:
+    shots = [e for e in log if e["kind"] == "shot"]
+    moves = edit_demo.camera_moves(log)
+    stops = {id(e): stop for e, _, stop in moves}
+    rows = []
+    for n, shot in enumerate(shots, 1):
+        last = n == len(shots)
+        t0 = float(shot["t"])
+        t1 = max(t0, end if last else float(shots[n]["t"]))
+        seconds = round((t1 - t0) / speed, 3)
+        row = {"row": n, **{k: shot[k] for k in ("key", "label") if shot.get(k) is not None},
+               "raw": [round(t0, 3), round(t1, 3)], "seconds": seconds, "budget": budget(seconds, rate),
+               "live": _live(frame, t0, t1, moves)}
+        key = frametext_key(shot.get("key"))
+        own = next((x for x in texts if x["kind"] == "shot" and x["key"] == key and abs(x["t"] - t0) <= NEAR), None)
+        if own:
+            row["text"] = own["text"]
+        left = [x for x in texts if x["kind"] == "leave" and x["key"] == key and t0 < x["t"] <= t1]
+        if left and left[-1]["text"] != row.get("text"):
+            row["text_end"] = left[-1]["text"]
+        row["texts"] = [{"key": x["key"], "t": x["t"], "text": x["text"]} for x in texts
+                        if x["kind"] == "text" and _inside(x["t"], t0, t1, last)]
+        row["marks"], row["notes"] = _marks_and_notes(log, texts, lambda t: _inside(t, t0, t1, last))
+        first = stops[id(shot)] + STILL_AFTER_MOVE if id(shot) in stops else t0 + STILL_AFTER_MOVE
+        row["stills"] = [still(f"{n:02d}-{name}.jpg", min(max(t, t0), max(t0, t1 - NEAR)))
+                         for name, t in (("a", first), ("b", (t0 + t1) / 2), ("c", t1 - LIVE_BEFORE_END[1]))]
+        rows.append(row)
+    return rows
+
+
+def _every_rows(end: float, every: float, speed: float, rate: float, frame, still) -> list[dict]:
+    rows, t0 = [], 0.0
+    while t0 < end - 0.01:
+        t1 = min(t0 + every, end)
+        n, seconds = len(rows) + 1, round((t1 - t0) / speed, 3)
+        rows.append({"row": n, "raw": [round(t0, 3), round(t1, 3)], "seconds": seconds, "budget": budget(seconds, rate),
+                     "live": _live(frame, t0, t1, []), "stills": [still(f"{n:02d}-a.jpg", t0)]})
+        t0 = t1
+    return rows
+
+
+def _script_pieces(take: Path, scripts: list[Path], log: list[dict], take_end: float) -> list[dict]:
+    """The scripts as pieces of the take, in the take's order, each with its captions' starts in the take's seconds.
+    Stops, before anything is written, on a script the clip step would refuse and on two scripts that overlap."""
+    pieces = []
+    for path in scripts:
+        story, beats = _clip_script(path)
+        start, end = edit_demo.clip_span(take, log, story.get("start"), story.get("end"))
+        speed = float(story.get("speed", edit_demo.DEFAULT_SPEED))
+        edit_demo.beat_layout(beats, log, start=start, end=end, speed=speed, title=story.get("title"))   # the clip step's refusals
+        end = min(end, take_end)   # a script may name an end past the take: its clip ends with the take
+        start = min(start, end)
+        floor = edit_demo.caption_floor(story.get("title"), speed)
+        starts = [(min(end, start + max((edit_demo.script_time(b["at"], log) + float(b.get("offset", 0)) - start) / speed, floor) * speed), n, b)
+                  for n, b in enumerate(beats, 1)]
+        pieces.append({"stem": path.stem, "start": start, "end": end, "speed": speed, "beats": sorted(starts, key=lambda x: x[0])})
+    pieces.sort(key=lambda p: p["start"])
+    for a, b in zip(pieces, pieces[1:]):
+        if a["end"] - b["start"] > 0.001:
+            raise SystemExit(f"brief: {a['stem']} and {b['stem']} cover the same seconds of the take "
+                             f"({b['start']:.2f}-{min(a['end'], b['end']):.2f} s): give the scripts of one run of the reel")
+    return pieces
+
+
+def _caption_rows(pieces: list[dict], log: list[dict], texts: list[dict], rate: float, frame, still) -> list[dict]:
+    """One row per caption of the scripts cut from this take, in the take's order. A row runs from its caption's start
+    over the rest of its clip and every following clip without a caption (it is narrated across, as a voice runs on
+    over the reel's later segments of its group). It ends where the reel would hold its last frame: at the next
+    caption when that is in the same script, else where the next script with a caption starts (not at that caption:
+    the head of a captioned clip is that clip's own); the last row runs to the last script's end."""
+    captions = [(t, p, n, b) for p in pieces for t, n, b in p["beats"]]
+    for p in pieces:
+        if not p["beats"] and (not captions or p["start"] < captions[0][0]):
+            print(f"brief: {p['stem']} has no caption and comes before the first one: it is in no row", file=sys.stderr)
+    moves = edit_demo.camera_moves(log)
+    frame_texts = sorted((x for x in texts if x["kind"] != "mark"), key=lambda x: x["t"])
+    rows = []
+    for k, (t0, piece, n, beat) in enumerate(captions):
+        last = k + 1 == len(captions)
+        t1 = pieces[-1]["end"] if last else captions[k + 1][0] if captions[k + 1][1] is piece else captions[k + 1][1]["start"]
+        spans = [(max(t0, p["start"]), min(t1, p["end"]), p["speed"]) for p in pieces
+                 if min(t1, p["end"]) - max(t0, p["start"]) > 1e-6] or [(t0, t0, piece["speed"])]
+        seconds = round(sum((hi - lo) / speed for lo, hi, speed in spans), 3)
+
+        def holds(t: float, closed_end: bool = False) -> bool:   # a time on a boundary belongs to the row that starts there
+            return any((lo < t <= hi) if closed_end else (lo <= t < hi or (last and t == hi)) for lo, hi, _ in spans)
+
+        raw = [[round(lo, 3), round(hi, 3)] for lo, hi, _ in spans]
+        row = {"row": k + 1, "script": piece["stem"], "beat": n, "caption": beat.get("text", ""),
+               "raw": raw[0] if len(raw) == 1 else raw, "seconds": seconds, "budget": budget(seconds, rate),
+               "live": _live(frame, spans[-1][0], spans[-1][1], moves)}
+        before = [x for x in frame_texts if x["t"] <= t0 + NEAR]
+        if before:
+            row["text"] = before[-1]["text"]
+        # what was kept later inside the row, in the take's order: each view's text as the camera arrives and as it
+        # leaves, and what rec.text kept. The row's end is a leave that is the last of them.
+        later = [x for x in frame_texts if x["t"] > t0 + NEAR and holds(x["t"], closed_end=x["kind"] == "leave")]
+        if later and later[-1]["kind"] == "leave":
+            if later[-1]["text"] != (later[-2]["text"] if len(later) > 1 else row.get("text")):
+                row["text_end"] = later[-1]["text"]
+            later = later[:-1]
+        row["texts"] = [{"key": x["key"], "t": x["t"], "text": x["text"]} for x in later]
+        row["marks"], row["notes"] = _marks_and_notes(log, texts, holds)
+        # the stills: half a clip second after the caption (after a camera move under way then), the second of the
+        # take at half the row's clip seconds, and just before the row's last piece ends
+        lo, hi, speed = spans[0]
+        first = lo + 0.5 * speed
+        first = next((stop + STILL_AFTER_MOVE for _, start, stop in moves if start <= first < stop), first)
+        half, middle = seconds / 2, spans[-1][1]
+        for a, b, v in spans:
+            if half <= (b - a) / v:
+                middle = a + half * v
+                break
+            half -= (b - a) / v
+        row["stills"] = [still(f"{k + 1:02d}-a.jpg", min(max(first, lo), max(lo, hi - NEAR))),
+                         still(f"{k + 1:02d}-b.jpg", middle),
+                         still(f"{k + 1:02d}-c.jpg", max(spans[-1][0], spans[-1][1] - LIVE_BEFORE_END[1]))]
+        rows.append(row)
+    return rows
+
+
+class FrameReader:
+    """The take's frames by their second, read once while a row needs them. The last FRAMES_HELD are held and no more:
+    a 1080p frame is about 8 MB and a long recording has hundreds of rows."""
+
+    def __init__(self, take: Path, end: float):
+        self.take, self.end, self.held = take, end, {}
+
+    def __call__(self, t: float) -> Image.Image:
+        t = round(min(max(t, 0.0), max(0.0, self.end - NEAR)), 3)
+        if t not in self.held:
+            if len(self.held) >= FRAMES_HELD:
+                del self.held[next(iter(self.held))]   # the oldest
+            self.held[t] = take_frame(self.take, t)
+        return self.held[t]
+
+
+def build_brief(take: Path, out: Path, *, scripts: list[Path] = (), speed: float = edit_demo.DEFAULT_SPEED,
+                rate: float = BRIEF_RATE, rate_from: str = "default", every: float = BRIEF_EVERY) -> dict:
+    """The `brief` report of a take, written to <out>/brief.json with its stills; the take and its files are only read."""
+    end = edit_demo.stream_seconds(take, "v")
+    if not end:
+        raise SystemExit(f"cannot read the take {take} as a video")
+    log = edit_demo.read_camlog(take)
+    texts = read_frametext(frametext_path(take))
+    mode = "captions" if scripts else "views" if any(e["kind"] == "shot" for e in log) else "every"
+    pieces = _script_pieces(take, list(scripts), log, end) if scripts else []   # refused here, before --out is touched
+    out.mkdir(parents=True, exist_ok=True)
+    for old in out.iterdir():   # an earlier run's stills, and nothing else of the folder
+        if old.is_file() and STILL_NAME.fullmatch(old.name):
+            old.unlink()
+    frame = FrameReader(take, end)
+
+    def still(name: str, t: float) -> str:
+        frame(t).save(out / name, "JPEG", quality=STILL_QUALITY)
+        return name
+
+    if mode == "captions":   # each script has its own speed: the report carries none
+        report = {"take": str(take), "mode": mode, "rate": rate, "rate_from": rate_from,
+                  "rows": _caption_rows(pieces, log, texts, rate, frame, still)}
+    else:
+        rows = (_view_rows(log, texts, end, speed, rate, frame, still) if mode == "views"
+                else _every_rows(end, every, speed, rate, frame, still))
+        report = {"take": str(take), "mode": mode, "speed": speed, "rate": rate, "rate_from": rate_from, "rows": rows}
+    if log and mode != "every" and not frametext_path(take).is_file():   # said once the rows stand: a refusal is one line
+        print(f"brief: no {frametext_path(take).name} beside the take: rows carry no text", file=sys.stderr)
+    _write_json(out / "brief.json", report)
+    return report
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -760,6 +1062,15 @@ def main() -> None:
     s.add_argument("--texts", type=Path, required=True, help='JSON: {"<name of a voice in the plan>": {"caption", "say", "what", "sources"}}')
     s.add_argument("--boxes", type=Path, nargs="+", action="extend", default=[], help="reports of `boxes`")
     s.add_argument("--out", type=Path, required=True, help="folder for index.json, the JPEGs and review.html")
+    f = sub.add_parser("brief", help="what a take shows, row by row, to write its captions and narration from")
+    f.add_argument("take", type=Path, help="the raw take (its camlog and frame text beside it), or any recording")
+    f.add_argument("--out", type=Path, required=True, help="folder for brief.json and the stills")
+    f.add_argument("--script", type=Path, nargs="+", action="extend", default=[],
+                   help="clip scripts cut from this take, those of one run of the reel: one row per caption")
+    f.add_argument("--speed", type=float, default=edit_demo.DEFAULT_SPEED, help="the clip's speed, without --script")
+    f.add_argument("--voices", type=Path, help="a voice.json: the speech rate is measured in it")
+    f.add_argument("--rate", type=float, help=f"spoken characters a second (default {BRIEF_RATE:g})")
+    f.add_argument("--every", type=float, default=BRIEF_EVERY, help="seconds a row lasts for a recording without a camlog")
     args = ap.parse_args()
     if args.cmd == "audit":
         plan = args.plan or args.reel.with_suffix(".voice.json")
@@ -779,6 +1090,16 @@ def main() -> None:
         _write_json(args.out, report)
         print(json.dumps({"out": str(args.out), "boxes": len(report["boxes"]),
                           "flagged": sum(1 for box in report["boxes"] if box["flags"])}))
+    elif args.cmd == "brief":
+        for name in ("rate", "every", "speed"):
+            if getattr(args, name) is not None and getattr(args, name) <= 0:
+                ap.error(f"--{name} must be above 0")
+        rate, rate_from = speech_rate(args.voices, args.rate)
+        report = build_brief(args.take, args.out, scripts=args.script, speed=args.speed, rate=rate, rate_from=rate_from,
+                             every=args.every)
+        print(json.dumps({"out": str(args.out / "brief.json"), "rows": len(report["rows"]),
+                          "stills": sum(len(row["stills"]) for row in report["rows"]),
+                          "live": sum(1 for row in report["rows"] if row["live"] is True), "rate": rate}))
     else:
         index = build_sheet(args.reel, args.plan, args.texts, args.boxes, args.out)
         page = args.out / index["page"]

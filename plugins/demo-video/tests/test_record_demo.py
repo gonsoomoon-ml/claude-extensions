@@ -36,7 +36,7 @@ STORYBOARD = """export default async function storyboard({ page, rec, siteUrl })
 
 
 def test_node_scripts_parse():
-    for f in ("record_demo.mjs", "storyboard.example.mjs"):
+    for f in ("record_demo.mjs", "storyboard.example.mjs", "frametext.mjs"):
         subprocess.run(["node", "--check", str(SCRIPTS / f)], check=True)
 
 
@@ -236,6 +236,10 @@ def test_mark_rows_logs_the_rows_rectangle(tmp_path, layout, wide):
     assert_encloses(zoom["rect"], at_rest)
     assert_encloses(zoomed["rect"], at_rest)
     assert_encloses(zoomed["rect"], bounds(video, zoomed["t"] + 0.3, tmp_path, "green"))
+    # a mark of rows keeps the rows' own text; rows that are not on the screen keep none
+    texts = {(e["kind"], e["key"]): e["text"] for e in read_frametext(tmp_path / "raw" / "r.frametext.txt")}
+    assert texts[("mark", "rows")] == "first\nsecond\nlast"
+    assert ("mark", "nowhere") not in texts
 
 
 MARGIN_PAGE = """<!doctype html><html><head><style>
@@ -303,3 +307,146 @@ def test_rects_hold_on_a_page_whose_body_has_the_default_margin(tmp_path, layout
     assert pan["camera"]["k"] == 1.2 and "rect" not in pan, "only focus and region shots carry a rect"
     assert pan["t"] == pytest.approx(probe["lastShot"], abs=0.006)
     assert pan["move"] == 0.8, "a move of its own length, made with the camera's apply"
+
+
+# ---------------------------------------------------------------- the text each frame shows (1.5.0)
+
+def test_recorder_keeps_the_frame_text():
+    recorder = (SCRIPTS / "record_demo.mjs").read_text()
+    for must in ("frameText", "elementText", "async text(", ".frametext.txt", "./frametext.mjs"):
+        assert must in recorder, must
+    assert ".texts.txt" not in recorder, "a storyboard's own text file is not the recorder's"
+    assert "rec.text(" in (SCRIPTS / "storyboard.example.mjs").read_text()
+
+
+def read_frametext(path):
+    """The checker's own reader, so the test reads the file as `brief` will."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("check_demo", SCRIPTS / "check_demo.py")
+    check_demo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(check_demo)
+    return check_demo.read_frametext(path)
+
+
+def record(tmp_path, page: str, storyboard: str, *more) -> subprocess.CompletedProcess:
+    (tmp_path / "page.html").write_text(page)
+    (tmp_path / "sb.mjs").write_text(storyboard)
+    return subprocess.run(["node", str(SCRIPTS / "record_demo.mjs"), "--url", (tmp_path / "page.html").as_uri(),
+                           "--storyboard", str(tmp_path / "sb.mjs"), "--name", "t", "--out", str(tmp_path / "raw"),
+                           "--playwright-root", PW_ROOT, *more], capture_output=True, text=True)
+
+
+TEXT_PAGE = """<!doctype html><html><head><style>
+html,body{margin:0;height:100%;background:#202830;color:#fff;font:20px/30px sans-serif}
+.abs{position:absolute}
+#panel{left:60px;top:60px;width:420px;height:300px;background:#30404f}
+#scroller,#big{height:30px;overflow:hidden}
+.xterm-rows{left:60px;top:400px;width:500px;font:20px/30px monospace;white-space:pre}
+#outside{left:1000px;top:600px;width:200px;height:40px}
+</style></head><body>
+<div id="panel" class="abs">
+<div id="title">INSIDE-ALPHA</div>
+<div id="scroller"><div>VISIBLE-ROW</div><div>CLIPPED-ROW</div></div>
+<div><input id="q" value="typed-query"><input type="password" value="secret-pw"></div>
+<div style="display:none">HIDDEN-TEXT</div><div style="visibility:hidden">INVISIBLE-TEXT</div>
+<div id="late"></div><div id="big"></div>
+</div>
+<div class="abs xterm-rows"><div><span>foo</span><span style="font-weight:bold">bar</span><span> baz</span></div></div>
+<div id="outside" class="abs">OUTSIDE-OMEGA</div>
+<script>const big=document.getElementById('big');for(let i=0;i<3000;i++){const d=document.createElement('div');d.textContent='ROW-'+i;big.appendChild(d)}</script>
+</body></html>"""
+
+TEXT_STORYBOARD = """import fs from 'node:fs'; import path from 'node:path';
+export default async function storyboard({ page, rec, siteUrl, option }) {
+  fs.writeFileSync(path.join(option('--out', 'raw'), 't.texts.txt'), 'OWN\\n');
+  await page.goto(siteUrl); await page.waitForTimeout(300);
+  await rec.text('early');                      // no camera yet: no entry, no error
+  await rec.install();
+  await rec.reset('wide', 'overview');
+  await rec.sleep(600);
+  await rec.focus('panel', '#panel', { pad: 20, kmax: 2 }, 'the panel');
+  await rec.mark('title', '#title', 'the title');
+  await rec.sleep(1800);
+  await page.evaluate(() => { document.querySelector('#late').textContent = 'LATE-RESULT'; });
+  await rec.text('now');
+  await page.evaluate(() => { document.querySelector('#late').textContent = 'LATER-RESULT'; });
+  const ms = await page.evaluate(() => { const t = performance.now(); window.__cam.frameText(); return performance.now() - t; });
+  rec.note('timing', { ms });
+  await rec.reset('wide2', 'overview again');
+  await rec.sleep(1600);
+  await page.goto(siteUrl); await page.waitForTimeout(300);   // a reload takes the camera away
+  await rec.text('gone');                                     // no camera: no entry, the take goes on
+}"""
+
+
+@pytest.mark.skipif(PW_ROOT is None or shutil.which("ffmpeg") is None, reason="needs PLAYWRIGHT_ROOT and ffmpeg")
+@pytest.mark.parametrize("layout", ["1920x1080", "1280x720"])
+def test_frame_text_holds_what_the_frame_shows_and_nothing_else(tmp_path, layout):
+    r = record(tmp_path, TEXT_PAGE, TEXT_STORYBOARD, "--layout", layout)
+    assert r.returncode == 0, r.stderr
+    raw = tmp_path / "raw"
+    e = read_frametext(raw / "t.frametext.txt")
+    assert [(x["kind"], x["key"]) for x in e] == [("shot", "wide"), ("shot", "panel"), ("mark", "title"),
+                                                  ("text", "now"), ("leave", "panel"), ("shot", "wide2")]
+    wide, panel, title, now, leave, wide2 = (x["text"] for x in e)
+    for s in ("INSIDE-ALPHA", "OUTSIDE-OMEGA", "VISIBLE-ROW", "typed-query", "foobar baz", "ROW-0"):
+        assert s in wide, s
+    for s in ("CLIPPED-ROW", "HIDDEN-TEXT", "INVISIBLE-TEXT", "secret-pw", "ROW-2999"):
+        assert s not in wide, s
+    assert "INSIDE-ALPHA" in panel and "typed-query" in panel
+    assert "OUTSIDE-OMEGA" not in panel and "LATE-RESULT" not in panel and "secret-pw" not in panel
+    assert title == "INSIDE-ALPHA"
+    assert "LATE-RESULT" in now and "LATER-RESULT" in leave
+    assert "LATER-RESULT" in wide2 and "OUTSIDE-OMEGA" in wide2
+    assert (raw / "t.texts.txt").read_text() == "OWN\n", "the storyboard's own file is untouched"
+    camlog = json.loads((raw / "t.camlog.json").read_text())
+    assert camlog["ok"] is True
+    shots = {x["key"]: x["t"] for x in camlog["log"] if x["kind"] == "shot"}
+    assert e[1]["t"] == shots["panel"], "a shot's text carries the shot's own time"
+    (timing,) = [x for x in camlog["log"] if x["kind"] == "timing"]
+    assert timing["ms"] < 300, "one capture on a page of 3,000 text nodes"
+
+
+@pytest.mark.skipif(PW_ROOT is None or shutil.which("ffmpeg") is None, reason="needs PLAYWRIGHT_ROOT and ffmpeg")
+def test_a_take_that_fails_still_writes_its_frame_text(tmp_path):
+    r = record(tmp_path, TEXT_PAGE, """export default async function storyboard({ page, rec, siteUrl }) {
+  await page.goto(siteUrl); await page.waitForTimeout(300); await rec.install();
+  await rec.reset('wide', 'overview');
+  throw new Error('the storyboard stops here');
+}""")
+    assert r.returncode == 1
+    assert [(x["kind"], x["key"]) for x in read_frametext(tmp_path / "raw" / "t.frametext.txt")] == [("shot", "wide")]
+
+
+POPOVER_PAGE = """<!doctype html><html><head><style>
+html,body{margin:0;height:100%;background:#202830;color:#fff;font:20px/30px sans-serif}
+#shell{height:60px;overflow:hidden}
+#fixed{position:fixed;left:100px;top:200px}
+#abs{position:absolute;left:100px;top:300px}
+#box{position:relative;height:40px;overflow:hidden}
+#inner{position:absolute;left:0;top:80px}
+#mixed{position:absolute;left:100px;top:500px;line-height:60px}
+</style></head><body>
+<div id="shell">SHELL-ROW
+<div id="fixed">FIXED-POPOVER</div>
+<div id="abs">ABS-POPOVER</div>
+<div id="box"><div id="inner">ABS-CLIPPED</div></div>
+</div>
+<div id="mixed"><span style="font-size:14px">Queued</span> <span style="font-size:40px">1,204</span> <span style="font-size:14px">Done</span></div>
+</body></html>"""
+
+
+@pytest.mark.skipif(PW_ROOT is None or shutil.which("ffmpeg") is None, reason="needs PLAYWRIGHT_ROOT and ffmpeg")
+def test_frame_text_keeps_a_popover_outside_its_overflow_parent_and_a_line_of_mixed_sizes(tmp_path):
+    """Final review 2026-11-28: an overflow box cuts only what is laid out in it; a big number between small labels is one row."""
+    r = record(tmp_path, POPOVER_PAGE, """export default async function storyboard({ page, rec, siteUrl }) {
+  await page.goto(siteUrl); await page.waitForTimeout(300); await rec.install();
+  await rec.reset('status panel', 'overview');
+  await rec.sleep(500);
+}""")
+    assert r.returncode == 0, r.stderr
+    (shot,) = read_frametext(tmp_path / "raw" / "t.frametext.txt")
+    assert shot["key"] == "status_panel"
+    for s in ("SHELL-ROW", "FIXED-POPOVER", "ABS-POPOVER", "Queued 1,204 Done"):
+        assert s in shot["text"], (s, shot["text"])
+    assert "ABS-CLIPPED" not in shot["text"], "cut by the box it is positioned in"

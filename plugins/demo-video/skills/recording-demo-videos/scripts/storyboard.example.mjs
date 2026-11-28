@@ -20,7 +20,7 @@ export default async function storyboard({ page, rec, tap, siteUrl, maxSeconds }
   while (rec.now() - started < maxSeconds) {
     await rec.sleep(300);
     const cur = await probe(page);
-    if (cur.done) { rec.note('scene_end'); break; }
+    if (cur.done) { await rec.text('end'); rec.note('scene_end'); break; }                // keep what the screen ended on (frame text)
     const free = rec.now() >= holdUntil;
     if (free && cur.thinking && !prev.thinking) {
       await rec.focus('decision', '.judgment-panel', { pad: 12, kmax: 1.75 }, 'System 2 deciding');

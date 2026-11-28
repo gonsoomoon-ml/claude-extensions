@@ -74,7 +74,9 @@ const measureRows = (page, firstNeedle, lastNeedle, how) => page.evaluate(([a, b
   if (i < 0) return null;
   const ra = rows[i].getBoundingClientRect(), rb = rows[Math.max(i, j)].getBoundingClientRect();
   const client = { left: ra.left, top: ra.top, right: ra.right, bottom: rb.bottom };
-  return how === 'frame' ? { rect: window.__cam.frameRect(window.__cam.fromClient(client, true)) } : window.__cam.fromClient(client);
+  if (how !== 'frame') return window.__cam.fromClient(client);
+  const text = rows.slice(i, Math.max(i, j) + 1).map(r => r.textContent.replace(/\s+$/, '')).join('\n');
+  return { rect: window.__cam.frameRect(window.__cam.fromClient(client, true)), text };
 }, [firstNeedle, lastNeedle, how]);
 
 /** Rows containing the needles (first..last) as a page rectangle, in the camera's untransformed page coordinates (as
@@ -90,9 +92,10 @@ export async function zoomRows(rec, page, key, firstNeedle, lastNeedle, opts = {
 }
 
 /** Say where the rows between two needles are on the frame, moving nothing (rec.mark for terminal rows): a "mark"
- *  entry with "rect" in the camlog. The text not on screen → missing: true, a warning, and null. */
+ *  entry with "rect" in the camlog, and the rows' own text in the take's frame text. The text not on screen →
+ *  missing: true, a warning, and null. */
 export async function markRows(rec, page, key, firstNeedle, lastNeedle, label) {
   const found = await measureRows(page, firstNeedle, lastNeedle, 'frame');
   if (!found) return rec.markRect(key, null, label, `${firstNeedle} not on screen`);
-  return rec.markRect(key, found.rect ?? undefined, label);   // off the frame: no rect
+  return rec.markRect(key, found.rect ?? undefined, label, undefined, undefined, found.text);   // off the frame: no rect
 }
