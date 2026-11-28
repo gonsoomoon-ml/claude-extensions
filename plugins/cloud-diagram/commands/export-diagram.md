@@ -1,5 +1,5 @@
 ---
-description: Render an aws-diagram-design SVG to PNG (or lift a 1.x/motion HTML diagram to SVG + PNG)
+description: Render an aws-diagram SVG to PNG (or lift a 1.x/motion HTML diagram to SVG + PNG)
 argument-hint: <svg-or-html-file> [--scale=N] [--png-dir=<dir>]
 allowed-tools:
   - Read
@@ -9,7 +9,7 @@ allowed-tools:
   - Glob
 ---
 
-Produce the PNG for the diagram at `$1`, following [`skills/aws-diagram-design/references/export.md`](../skills/aws-diagram-design/references/export.md). Treat that reference as the source of truth — don't reimplement the logic here.
+Produce the PNG for the diagram at `$1`, following [`skills/aws-diagram/references/export.md`](../skills/aws-diagram/references/export.md). Treat that reference as the source of truth — don't reimplement the logic here.
 
 Full argument string: `$ARGUMENTS`
 

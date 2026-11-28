@@ -1,10 +1,10 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
-  "name": "aws-diagram-design",
+  "name": "cloud-diagram",
   "version": "2.3.0",
-  "description": "Finished, presentation-ready AWS diagram images (SVG + PNG) to embed in docs and slides — a rendered picture, not an editable draw.io file (for that, use aws-drawio-diagram). Amazon Ember typography, squid ink + smile orange skin, official AWS Architecture Icons bundled. 27 visual types, draw.io and Mermaid import. Includes a Python generator (scripts/pygen) that renders spec files to bilingual (ko/en) SVG and PNG sets in the same house style.",
+  "description": "Finished, presentation-ready cloud diagram images (SVG + PNG) to embed in docs and slides — a rendered picture, not an editable draw.io file (for that, use aws-drawio-diagram). One skill today, aws-diagram. Amazon Ember typography, squid ink + smile orange skin, official AWS Architecture Icons bundled. 27 visual types, draw.io and Mermaid import. Includes a Python generator (scripts/pygen) that renders spec files to bilingual (ko/en) SVG and PNG sets in the same house style. Fork of hi-space/hi-aws-skills aws-diagram-design 2.3.0 (MIT).",
   "author": {
-    "name": "hi-space"
+    "name": "gonsoomoon-ml"
   },
   "keywords": [
     "aws diagram",
@@ -21,5 +21,5 @@
     "png export"
   ],
   "license": "MIT",
-  "repository": "https://github.com/hi-space/hi-aws-skills"
+  "repository": "https://github.com/gonsoomoon-ml/claude-extensions"
 }

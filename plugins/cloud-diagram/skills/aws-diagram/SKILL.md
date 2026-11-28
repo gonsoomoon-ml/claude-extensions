@@ -1,11 +1,12 @@
 ---
-name: aws-diagram-design
+name: aws-diagram
 description: "Create finished, presentation-ready diagram images (SVG + PNG) to embed in docs and slides — the output is a rendered picture, not an editable draw.io file (for that, use the aws-drawio-diagram skill). Covers branded architecture, IT current-state, flowchart, sequence, state machine, ER/data model, timeline, swimlane, quadrant, radar/spider, loop/flywheel, nested, tree, org chart, layer stack, Venn, pyramid/funnel, bar, line, Gantt and scatter charts, high-level, process, medallion, data flow, DP integration, or DP security matrix diagrams. Default skin is the AWS brand (Amazon Ember, squid ink, smile orange) with the official AWS Architecture Icons (EC2, Lambda, S3, VPC zones, …) bundled. Redraw .drawio/.drawio.png/.drawio.svg or Mermaid .mmd sources at a chosen size/detail; onboard brand tokens from a website; add semantic patterns, callouts, accessible motion, or sketchy/hand-drawn styling. Batch/bilingual (ko+en) PNG sets for docs via the bundled Python generator. Korean triggers: AWS 아키텍처 다이어그램, 구성도, 아키텍처 그림, 흐름도, 순서도, 시퀀스 다이어그램, 다이어그램 그려줘/그리기, 이미지로 뽑아줘, mermaid 교체. 열어서 편집할 .drawio 파일이 필요하면 aws-drawio-diagram 스킬을 쓰세요."
 license: MIT
 metadata:
   version: "2.0.0"
   base: "masangbeom/aws-diagram-design 1.2.0 (cathrynlavery/diagram-design 2.3.2 + AWS brand skin) + Python generator"
-  source: "https://github.com/hi-space/hi-aws-skills"
+  fork_of: "hi-space/hi-aws-skills aws-diagram-design 2.3.0 (8e00c8d)"
+  source: "https://github.com/gonsoomoon-ml/claude-extensions"
 ---
 
 # Diagram Design
@@ -550,7 +551,7 @@ Every diagram is an accessible figure by default:
 5. `<desc>` is one sentence stating what the diagram shows in terms a reader needs without the image. Describe the content, not the geometry: “Org chart showing a command center routing work to specialist agents and escalation owners,” not “A box at the top with five boxes below it.” A shape-by-shape narration is worse than no useful description.
 6. Decorative-only SVG, such as the specimen glyphs in `assets/icons.html`, carries `aria-hidden="true"` instead. Giving decorative marks accessible names adds noise.
 
-### Re-export — Re-running `finalize.py` on a finished `.svg` is idempotent and rewrites the PNG; `/aws-diagram-design:export-diagram` wraps it and also handles 1.x `.html` files via `html_to_svg.py` (see [export.md](references/export.md)).
+### Re-export — Re-running `finalize.py` on a finished `.svg` is idempotent and rewrites the PNG; `/cloud-diagram:export-diagram` wraps it and also handles 1.x `.html` files via `html_to_svg.py` (see [export.md](references/export.md)).
 
 For an imported diagram, pixel dimensions come from the `viewBox` × scale factor, so its size decision belongs to §11, not to export. For any diagram that needs an exact frame (an OG card or a 1920×1080 slide image), see [`export.md` § Sizing](references/export.md).
 

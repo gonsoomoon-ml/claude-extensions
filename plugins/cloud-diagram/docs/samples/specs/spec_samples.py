@@ -1,4 +1,4 @@
-"""README showcase diagrams for aws-diagram-design, built with the bundled generator.
+"""README showcase diagrams for cloud-diagram, built with the bundled generator.
 
     bash docs/samples/build_samples.sh        # → docs/samples/<slug>.svg + .png
 

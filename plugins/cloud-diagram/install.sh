@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# aws-diagram-design installer
+# cloud-diagram installer (aws-diagram skill)
 #
 #   ./install.sh claude-code                  # print Claude Code plugin install steps
 #   ./install.sh kiro [--workspace] [--link]  # copy (or symlink) the skill for Kiro
@@ -9,8 +9,8 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKILL_SRC="$REPO_DIR/skills/aws-diagram-design"
-SKILL_NAME="aws-diagram-design"
+SKILL_SRC="$REPO_DIR/skills/aws-diagram"
+SKILL_NAME="aws-diagram"
 
 TARGET="${1:-}"
 shift || true
@@ -49,8 +49,8 @@ case "$TARGET" in
     cat <<EOF
 Claude Code installs this repo as a plugin (skill + slash commands). In a Claude Code session run:
 
-  /plugin marketplace add hi-space/hi-aws-skills      # or the local clone: $(dirname "$(dirname "$REPO_DIR")")
-  /plugin install aws-diagram-design@hi-aws-skills
+  /plugin marketplace add gonsoomoon-ml/claude-extensions      # or the local clone: $(dirname "$(dirname "$REPO_DIR")")
+  /plugin install cloud-diagram@gonsoomoon-extensions
 
 Then restart or /reload-plugins when prompted.
 

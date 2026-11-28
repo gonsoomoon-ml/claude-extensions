@@ -7,18 +7,18 @@
 스킬과 슬래시 커맨드 3종이 함께 설치된다. Claude Code 세션에서:
 
 ```
-/plugin marketplace add hi-space/hi-aws-skills
-/plugin install aws-diagram-design@hi-aws-skills
+/plugin marketplace add gonsoomoon-ml/claude-extensions
+/plugin install cloud-diagram@gonsoomoon-extensions
 ```
 
-설치 후 안내에 따라 `/reload-plugins`를 실행하거나 세션을 재시작한다. 로컬 클론을 쓰려면 `/plugin marketplace add /path/to/hi-aws-skills` 로 저장소 루트를 등록한다.
+설치 후 안내에 따라 `/reload-plugins`를 실행하거나 세션을 재시작한다. 로컬 클론을 쓰려면 `/plugin marketplace add /path/to/claude-extensions` 로 저장소 루트를 등록한다.
 
 ### 방법 2 — 스킬 단독
 
 슬래시 커맨드 없이 스킬만 쓰려면 심링크 하나로 충분하다:
 
 ```bash
-ln -s /path/to/hi-aws-skills/plugins/aws-diagram-design/skills/aws-diagram-design ~/.claude/skills/aws-diagram-design
+ln -s /path/to/claude-extensions/plugins/cloud-diagram/skills/aws-diagram ~/.claude/skills/aws-diagram
 ```
 
 심링크라 저장소를 수정하면 즉시 반영된다. 개발 중에는 이 방식이 편하다.
@@ -47,9 +47,9 @@ AWS 서비스를 지명하면 공식 아이콘이 자동으로 들어가고, VPC
 
 | 커맨드 | 역할 |
 |--------|------|
-| `/aws-diagram-design:export-diagram <svg\|html> [--scale=N] [--png-dir=<dir>]` | SVG를 PNG로 렌더, 1.x HTML은 SVG+PNG로 변환 |
-| `/aws-diagram-design:import-drawio <file.drawio>` | draw.io 원본을 에디토리얼 스타일로 다시 그리기 |
-| `/aws-diagram-design:import-mermaid <file.mmd>` | Mermaid 원본을 다시 그리기 |
+| `/cloud-diagram:export-diagram <svg\|html> [--scale=N] [--png-dir=<dir>]` | SVG를 PNG로 렌더, 1.x HTML은 SVG+PNG로 변환 |
+| `/cloud-diagram:import-drawio <file.drawio>` | draw.io 원본을 에디토리얼 스타일로 다시 그리기 |
+| `/cloud-diagram:import-mermaid <file.mmd>` | Mermaid 원본을 다시 그리기 |
 
 임포트 커맨드 둘은 `--format=svg+png|svg|png`, `--size=<프리셋>`, `--detail=faithful|balanced|simplified`, `--audience=engineer|mixed|executive`, `--variant=light|dark|terminal`, `--output=<경로>`, 페이지 선택(`--page`/`--diagram`)까지 받는다. 전체 시그니처의 기준은 각 `commands/*.md`의 argument-hint다.
 
@@ -63,7 +63,7 @@ pip install playwright && playwright install chromium
 
 ## 문서용 다이어그램 일괄 생성 (Python)
 
-여러 장을 한 스타일로, 한국어·영어 판을 같은 레이아웃으로 뽑을 때는 `skills/aws-diagram-design/scripts/pygen/` 을 쓴다. "docs/diagrams 의 mermaid 를 이 스타일 PNG 로 바꿔줘", "모듈별 구성도를 ko/en 으로 만들어줘" 같은 요청에서 스킬이 §13 을 따라 이 경로를 택한다.
+여러 장을 한 스타일로, 한국어·영어 판을 같은 레이아웃으로 뽑을 때는 `skills/aws-diagram/scripts/pygen/` 을 쓴다. "docs/diagrams 의 mermaid 를 이 스타일 PNG 로 바꿔줘", "모듈별 구성도를 ko/en 으로 만들어줘" 같은 요청에서 스킬이 §13 을 따라 이 경로를 택한다.
 
 ```bash
 python3 <skill-dir>/scripts/pygen/build.py docs/diagrams --out docs/diagrams/out --png --png-dir static/images/diagrams   # spec_*.py → SVG (ko/en) + PNG @2x
@@ -74,7 +74,7 @@ python3 <skill-dir>/scripts/pygen/build.py docs/diagrams --out docs/diagrams/out
 저장소를 체크아웃한 상태라면 생성된 다이어그램을 스크립트로 검증할 수 있다:
 
 ```bash
-python3 skills/aws-diagram-design/scripts/finalize.py <생성된.svg> --check-only   # 접근성·단일 파일·라벨 기하 계약
+python3 skills/aws-diagram/scripts/finalize.py <생성된.svg> --check-only   # 접근성·단일 파일·라벨 기하 계약
 python3 scripts/verify-motion.py <모션.html>                                    # 모션 사용 시
 ```
 

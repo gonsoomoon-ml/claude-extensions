@@ -1,6 +1,6 @@
-# AWS Diagram Design Skill(aws-diagram-design)
+# cloud-diagram
 
-> [masangbeom/aws-diagram-design](https://github.com/masangbeom/aws-diagram-design) 1.2.0 을 [hi-aws-skills](https://github.com/hi-space/hi-aws-skills) 로 가져온 판입니다. 원본 위에 `skills/aws-diagram-design/scripts/pygen/` Python 생성기(ko/en PNG 일괄 생성)와 `references/python-generator.md` 를 더했습니다.
+> 클라우드 구성도를 그리는 플러그인입니다. 지금 들어 있는 스킬은 AWS 그림을 그리는 `aws-diagram` 하나입니다. 가져온 곳은 아래 「출처」 절에 있습니다.
 
 **한국어** | [English](README.en.md)
 
@@ -61,16 +61,16 @@ Kinesis → Lambda → S3 데이터 레이크 스트리밍 수집과, Glue 카�
 ### Claude Code
 
 ```
-/plugin marketplace add hi-space/hi-aws-skills
+/plugin marketplace add gonsoomoon-ml/claude-extensions
 ```
 ```
-/plugin install aws-diagram-design@hi-aws-skills
+/plugin install cloud-diagram@gonsoomoon-extensions
 ```
 ```
 /reload-plugins
 ```
 
-로컬에 클론해 뒀다면 경로로 등록해도 됩니다: `/plugin marketplace add /path/to/hi-aws-skills`.
+로컬에 클론해 뒀다면 경로로 등록해도 됩니다: `/plugin marketplace add /path/to/claude-extensions`.
 
 ### Kiro (IDE / CLI)
 
@@ -86,7 +86,7 @@ Kiro는 Anthropic 형식 Agent Skills를 그대로 읽으므로 별도 변환이
 ./install.sh fonts           # 번들된 Amazon Ember TTF를 OS 폰트 디렉터리에 설치
 ```
 
-Amazon Ember는 [Amazon 공식 배포본](https://developer.amazon.com/en-US/alexa/branding/echo-guidelines/identity-guidelines/typography)을 스킬에 번들해 두었습니다(`skills/aws-diagram-design/assets/fonts/`). 생성되는 다이어그램은 로컬 설치본 → 번들 woff2 → Helvetica 순으로 폰트를 찾으므로, 설치하지 않아도 동작에는 문제가 없습니다.
+Amazon Ember는 [Amazon 공식 배포본](https://developer.amazon.com/en-US/alexa/branding/echo-guidelines/identity-guidelines/typography)을 스킬에 번들해 두었습니다(`skills/aws-diagram/assets/fonts/`). 생성되는 다이어그램은 로컬 설치본 → 번들 woff2 → Helvetica 순으로 폰트를 찾으므로, 설치하지 않아도 동작에는 문제가 없습니다.
 
 ## 이렇게 써보세요
 
@@ -102,9 +102,9 @@ Amazon Ember는 [Amazon 공식 배포본](https://developer.amazon.com/en-US/ale
 기존 파일 재작도와 내보내기는 슬래시 커맨드로:
 
 ```
-/aws-diagram-design:import-drawio legacy-arch.drawio     # draw.io 파일을 다시 그리기
-/aws-diagram-design:import-mermaid pipeline.mmd          # Mermaid 파일을 다시 그리기
-/aws-diagram-design:export-diagram my-diagram.svg       # SVG → PNG 다시 렌더 (1.x HTML도 받음)
+/cloud-diagram:import-drawio legacy-arch.drawio     # draw.io 파일을 다시 그리기
+/cloud-diagram:import-mermaid pipeline.mmd          # Mermaid 파일을 다시 그리기
+/cloud-diagram:export-diagram my-diagram.svg       # SVG → PNG 다시 렌더 (1.x HTML도 받음)
 ```
 
 재작도 시 크기(문서 인라인/와이드/슬라이드 16:9/소셜 카드), 상세도(faithful/balanced/simplified), 독자(엔지니어/혼합/경영진)를 지정할 수 있고, 병합되거나 생략된 요소는 fidelity ledger로 보고됩니다.
@@ -114,11 +114,11 @@ Amazon Ember는 [Amazon 공식 배포본](https://developer.amazon.com/en-US/ale
 워크숍 가이드나 문서 사이트처럼 다이어그램이 수십 장 필요하고 한국어·영어 판을 같은 레이아웃으로 유지해야 하면, SVG를 손으로 쓰는 대신 `scripts/pygen` 생성기를 씁니다. 스펙 파일은 좌표와 텍스트만 적고, 라이브러리가 스킨·아이콘·직교 커넥터·라벨 마스크·범례·접근성 태그를 규칙대로 그립니다.
 
 ```bash
-SKILL=plugins/aws-diagram-design/skills/aws-diagram-design
+SKILL=plugins/cloud-diagram/skills/aws-diagram
 python3 $SKILL/scripts/pygen/build.py docs/diagrams --out docs/diagrams/out --png --png-dir static/images/diagrams   # spec_*.py → SVG (ko/en) + PNG @2x
 ```
 
-스펙 작성법과 API, 텍스트 예산(이름 1줄 + 부제 1줄, 16px/12px), 흔한 실수는 [`references/python-generator.md`](skills/aws-diagram-design/references/python-generator.md) 에, 동작하는 예시는 [`scripts/pygen/spec_example.py`](skills/aws-diagram-design/scripts/pygen/spec_example.py) 에 있습니다.
+스펙 작성법과 API, 텍스트 예산(이름 1줄 + 부제 1줄, 16px/12px), 흔한 실수는 [`references/python-generator.md`](skills/aws-diagram/references/python-generator.md) 에, 동작하는 예시는 [`scripts/pygen/spec_example.py`](skills/aws-diagram/scripts/pygen/spec_example.py) 에 있습니다.
 
 ## AWS 공식 리소스를 그대로 씁니다
 
@@ -131,11 +131,11 @@ python3 $SKILL/scripts/pygen/build.py docs/diagrams --out docs/diagrams/out --pn
 ## 저장소 구조
 
 ```
-aws-diagram-design/
+cloud-diagram/
 ├── .claude-plugin/                 # Claude Code 플러그인 매니페스트 + 마켓플레이스 카탈로그
 ├── plugin.json                     # Agent Plugins 매니페스트 (Kiro Power용)
 ├── commands/                       # 슬래시 커맨드 3종 (import-drawio / import-mermaid / export-diagram)
-├── skills/aws-diagram-design/      # 정본 스킬 (모든 환경 공용)
+├── skills/aws-diagram/      # 정본 스킬 (모든 환경 공용)
 │   ├── SKILL.md                    #   설계 시스템 + 27개 타입 라우팅
 │   ├── references/                 #   타입별 스펙 40개 (style-guide, type-*, primitive-aws-icons 등)
 │   ├── assets/                     #   템플릿·예제, aws-icons/ 812 SVG, fonts/ Amazon Ember
@@ -145,6 +145,13 @@ aws-diagram-design/
 ├── docs/                           # 환경별 한글 가이드 + samples/ 예제 다이어그램
 └── install.sh                      # claude-code · kiro · fonts 설치
 ```
+
+## 출처
+
+hi-space 의 [hi-aws-skills](https://github.com/hi-space/hi-aws-skills) `plugins/aws-diagram-design` 2.3.0(커밋 `8e00c8d`, MIT)을 가져와, 플러그인 이름을 `cloud-diagram`, 스킬 이름을 `aws-diagram` 으로 바꾼 것입니다. 원 저작권 표시는 `LICENSE` 에 그대로 두었습니다.
+
+- 계보: [cathrynlavery/diagram-design](https://github.com/cathrynlavery/diagram-design) 2.3.2 → [masangbeom/aws-diagram-design](https://github.com/masangbeom/aws-diagram-design) 1.2.0(AWS 브랜드 스킨) → hi-aws-skills(Python 생성기 `scripts/pygen/` 추가) → 이 저장소
+- 2.3.0 (2026-11-28): 원본 그대로 가져와 이름만 바꿨습니다.
 
 ## 라이선스
 

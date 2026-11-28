@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 PLUGIN = Path(__file__).resolve().parents[1]
-SKILL = PLUGIN / "skills" / "aws-diagram-design"
+SKILL = PLUGIN / "skills" / "aws-diagram"
 SCRIPTS = SKILL / "scripts"
 
 

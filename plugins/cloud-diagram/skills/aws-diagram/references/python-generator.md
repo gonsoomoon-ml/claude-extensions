@@ -19,7 +19,7 @@ python3 <skill>/scripts/pygen/build.py docs/diagrams --out docs/diagrams/out --s
                                                                              # 3. SVG per slug/lang; finalize → check, fonts, PNG @2x
 ```
 
-`<skill>` is this skill's directory (plugin cache path, `~/.claude/skills/aws-diagram-design`, or a clone).
+`<skill>` is this skill's directory (plugin cache path, `~/.claude/skills/aws-diagram`, or a clone).
 `build.py` puts `scripts/pygen` on `sys.path`, so specs import with `from awsdiag import Canvas, T`.
 Embed the PNG in the doc and delete the Mermaid source it replaces. Open the PNG and read every label before
 declaring done; a diagram that needs zooming has too much text.

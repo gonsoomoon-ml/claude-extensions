@@ -9,7 +9,7 @@ allowed-tools:
   - Glob
 ---
 
-Redraw the draw.io file at `$1` as a diagram in this skill's design system, following [`skills/aws-diagram-design/references/import-drawio.md`](../skills/aws-diagram-design/references/import-drawio.md) and [`skills/aws-diagram-design/references/output-spec.md`](../skills/aws-diagram-design/references/output-spec.md). Treat those references as the source of truth — don't reimplement the logic here.
+Redraw the draw.io file at `$1` as a diagram in this skill's design system, following [`skills/aws-diagram/references/import-drawio.md`](../skills/aws-diagram/references/import-drawio.md) and [`skills/aws-diagram/references/output-spec.md`](../skills/aws-diagram/references/output-spec.md). Treat those references as the source of truth — don't reimplement the logic here.
 
 Full argument string: `$ARGUMENTS`
 

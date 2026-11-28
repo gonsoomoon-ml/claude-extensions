@@ -9,7 +9,7 @@ allowed-tools:
   - Glob
 ---
 
-Redraw the Mermaid source at `$1` in this skill's design system, following [`skills/aws-diagram-design/references/import-mermaid.md`](../skills/aws-diagram-design/references/import-mermaid.md) and [`skills/aws-diagram-design/references/output-spec.md`](../skills/aws-diagram-design/references/output-spec.md). Treat those references as the source of truth.
+Redraw the Mermaid source at `$1` in this skill's design system, following [`skills/aws-diagram/references/import-mermaid.md`](../skills/aws-diagram/references/import-mermaid.md) and [`skills/aws-diagram/references/output-spec.md`](../skills/aws-diagram/references/output-spec.md). Treat those references as the source of truth.
 
 Full argument string: `$ARGUMENTS`
 

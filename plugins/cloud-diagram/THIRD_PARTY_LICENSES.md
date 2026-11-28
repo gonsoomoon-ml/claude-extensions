@@ -1,6 +1,7 @@
 # Third-party licenses
 
-aws-diagram-design is MIT-licensed (see [`LICENSE`](LICENSE)). It is a derivative of
+cloud-diagram is MIT-licensed (see [`LICENSE`](LICENSE)). It is a fork of
+[hi-space/hi-aws-skills](https://github.com/hi-space/hi-aws-skills) aws-diagram-design 2.3.0, itself a derivative of
 [cathrynlavery/diagram-design](https://github.com/cathrynlavery/diagram-design) (MIT, © Cathryn Lavery),
 re-skinned to the AWS brand with the official AWS Architecture Icons bundled. It redistributes
 content from the following third-party sources under their respective licenses.
@@ -9,33 +10,33 @@ content from the following third-party sources under their respective licenses.
 
 - **License:** MIT
 - **Upstream:** https://github.com/cathrynlavery/diagram-design (base version 2.3.2)
-- **Used in:** the entire skill structure — `skills/aws-diagram-design/` (SKILL.md, references, templates, examples, scripts), `commands/`, and `scripts/`.
+- **Used in:** the entire skill structure — `skills/aws-diagram/` (SKILL.md, references, templates, examples, scripts), `commands/`, and `scripts/`.
 
 ## AWS Architecture Icons
 
 - **License / terms:** AWS Architecture Icons terms — https://aws.amazon.com/architecture/icons/
 - **Copyright:** © Amazon Web Services, Inc. or its affiliates.
 - **Release:** Icon package 07312026.
-- **Used in:** `skills/aws-diagram-design/assets/aws-icons/` (812 SVGs: 305 service, 466 resource, 15 group, 26 category), the gallery `assets/aws-icons.html`, and `references/primitive-aws-icons.md`.
+- **Used in:** `skills/aws-diagram/assets/aws-icons/` (812 SVGs: 305 service, 466 resource, 15 group, 26 category), the gallery `assets/aws-icons.html`, and `references/primitive-aws-icons.md`.
 
 Provided by AWS for use in architecture diagrams per the terms above. The icons must not be
 altered, recolored, or used to imply AWS sponsorship of non-AWS products.
 
 ## Amazon Bedrock AgentCore resource icons (traced, not from the official package)
 
-- **Files:** `skills/aws-diagram-design/assets/aws-icons/resource/Artificial-Intelligence/Res_Amazon-Bedrock-AgentCore_*_48.svg` (11 icons: AgentCore, AI Agent, Runtime, Gateway, Memory, Identity, Observability, Policy Engine, Evaluations, Browser Tool, Code Interpreter).
+- **Files:** `skills/aws-diagram/assets/aws-icons/resource/Artificial-Intelligence/Res_Amazon-Bedrock-AgentCore_*_48.svg` (11 icons: AgentCore, AI Agent, Runtime, Gateway, Memory, Identity, Observability, Policy Engine, Evaluations, Browser Tool, Code Interpreter).
 - **Source:** PNG artwork supplied by the repository owner (`AgentCore_purple/`), vectorised with `scripts/trace_png_icons.py` (potrace). Colours kept as supplied: black `#000000` + purple `#7B27FF`.
 - **Status:** these are *not* part of the AWS Architecture Icons package 07312026. The official package carries only the service icon `Arch_Amazon-Bedrock-AgentCore_48.svg`. Replace these files with the official resource icons when AWS publishes them, and keep them unmodified in diagrams as with any AWS mark.
 
 ## Amazon Ember (font — bundled)
 
 - **License / terms:** Amazon Ember Licensing Guidelines — shipped alongside the fonts at
-  `skills/aws-diagram-design/assets/fonts/Amazon-Ember-Licensing-Guidelines.pdf`.
+  `skills/aws-diagram/assets/fonts/Amazon-Ember-Licensing-Guidelines.pdf`.
 - **Copyright:** © Amazon Technologies, Inc.
 - **Source:** Amazon's public typography download,
   https://developer.amazon.com/en-US/alexa/branding/echo-guidelines/identity-guidelines/typography
   (`Amazon_Typefaces_Complete_Font_Set_Mar2020.zip`), redistributed unmodified.
-- **Used in:** `skills/aws-diagram-design/assets/fonts/` — woff2 webfonts (Amazon Ember
+- **Used in:** `skills/aws-diagram/assets/fonts/` — woff2 webfonts (Amazon Ember
   300/400/400i/600/700/800, Amazon Ember Mono 400/700) referenced by generated diagrams via
   `@font-face`, and desktop TTFs installable with `./install.sh fonts`.
 
@@ -48,19 +49,19 @@ reusing the fonts outside this skill.
 
 - **License:** SIL Open Font License 1.1
 - **Upstream:** https://vercel.com/font (loaded at render time from Google Fonts)
-- **Used in:** legacy pre-baked example assets only (`skills/aws-diagram-design/assets/example-*.html`, built under earlier skins) and the opt-in terminal variant — loaded via `fonts.googleapis.com` at render time, not bundled. Newly generated diagrams use the bundled **Amazon Ember Mono** for all mono roles instead.
+- **Used in:** legacy pre-baked example assets only (`skills/aws-diagram/assets/example-*.html`, built under earlier skins) and the opt-in terminal variant — loaded via `fonts.googleapis.com` at render time, not bundled. Newly generated diagrams use the bundled **Amazon Ember Mono** for all mono roles instead.
 
 ## Tabler Icons
 
 - **License:** MIT
 - **Upstream:** https://github.com/tabler/tabler-icons
-- **Used in:** stroked icons embedded in `skills/aws-diagram-design/references/primitive-icons.md` and `skills/aws-diagram-design/assets/icons.html` (categories: Compute, People, Network, Data, Kubernetes, Action, DevOps, plus the stroked Brand outlines for Docker, Terraform, AWS, Azure, GitHub).
+- **Used in:** stroked icons embedded in `skills/aws-diagram/references/primitive-icons.md` and `skills/aws-diagram/assets/icons.html` (categories: Compute, People, Network, Data, Kubernetes, Action, DevOps, plus the stroked Brand outlines for Docker, Terraform, AWS, Azure, GitHub).
 
 ## Simple Icons
 
 - **License:** CC0 1.0 Universal (Public Domain Dedication)
 - **Upstream:** https://github.com/simple-icons/simple-icons
-- **Used in:** filled brand silhouettes embedded in `skills/aws-diagram-design/references/primitive-icons.md` and `skills/aws-diagram-design/assets/icons.html` (Kubernetes, Google Cloud, PostgreSQL, Nginx, Gitea, Keycloak, MinIO, Apache NiFi, Apache Airflow, Trino, Apache Superset, Jupyter, Python, R).
+- **Used in:** filled brand silhouettes embedded in `skills/aws-diagram/references/primitive-icons.md` and `skills/aws-diagram/assets/icons.html` (Kubernetes, Google Cloud, PostgreSQL, Nginx, Gitea, Keycloak, MinIO, Apache NiFi, Apache Airflow, Trino, Apache Superset, Jupyter, Python, R).
 
 ## log-z/logos
 

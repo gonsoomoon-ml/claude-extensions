@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Copy AWS Architecture Icons into the aws-diagram-design skill assets,
+"""Copy AWS Architecture Icons into the aws-diagram skill assets,
 and generate INDEX.md + aws-icons.html gallery.
 
 Usage:

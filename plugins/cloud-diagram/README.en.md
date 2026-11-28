@@ -1,6 +1,6 @@
-# AWS Diagram Design Skill (aws-diagram-design)
+# cloud-diagram
 
-> Fork of [masangbeom/aws-diagram-design](https://github.com/masangbeom/aws-diagram-design) 1.2.0 maintained in [hi-aws-skills](https://github.com/hi-space/hi-aws-skills). Adds a Python generator (`skills/aws-diagram-design/scripts/pygen/`) that renders spec files to bilingual (ko/en) SVG + PNG sets in the same house style; see `references/python-generator.md`.
+> A plugin for cloud diagrams. Today it ships one skill, `aws-diagram`, which draws AWS diagrams. Where it comes from is in the Source section below.
 
 [한국어](README.md) | **English**
 
@@ -61,16 +61,16 @@ A role-scoped data flow showing who does what at each stage. A Data Admin hands 
 ### Claude Code
 
 ```
-/plugin marketplace add hi-space/hi-aws-skills
+/plugin marketplace add gonsoomoon-ml/claude-extensions
 ```
 ```
-/plugin install aws-diagram-design@hi-aws-skills
+/plugin install cloud-diagram@gonsoomoon-extensions
 ```
 ```
 /reload-plugins
 ```
 
-If you've cloned the repo locally, a path works too: `/plugin marketplace add /path/to/hi-aws-skills`.
+If you've cloned the repo locally, a path works too: `/plugin marketplace add /path/to/claude-extensions`.
 
 ### Kiro (IDE / CLI)
 
@@ -86,7 +86,7 @@ Kiro reads Anthropic-format Agent Skills natively, so no conversion is needed. S
 ./install.sh fonts           # install the bundled Amazon Ember TTFs into your OS font directory
 ```
 
-Amazon Ember is bundled with the skill from [Amazon's official distribution](https://developer.amazon.com/en-US/alexa/branding/echo-guidelines/identity-guidelines/typography) (`skills/aws-diagram-design/assets/fonts/`). Generated diagrams resolve fonts in this order: locally installed copy → bundled woff2 → Helvetica — so everything works even if you skip this step.
+Amazon Ember is bundled with the skill from [Amazon's official distribution](https://developer.amazon.com/en-US/alexa/branding/echo-guidelines/identity-guidelines/typography) (`skills/aws-diagram/assets/fonts/`). Generated diagrams resolve fonts in this order: locally installed copy → bundled woff2 → Helvetica — so everything works even if you skip this step.
 
 ## How to use it
 
@@ -102,9 +102,9 @@ Just ask in plain language:
 Redraw existing files and export with slash commands:
 
 ```
-/aws-diagram-design:import-drawio legacy-arch.drawio     # redraw a draw.io file
-/aws-diagram-design:import-mermaid pipeline.mmd          # redraw a Mermaid file
-/aws-diagram-design:export-diagram my-diagram.svg        # re-render SVG → PNG (also accepts 1.x HTML)
+/cloud-diagram:import-drawio legacy-arch.drawio     # redraw a draw.io file
+/cloud-diagram:import-mermaid pipeline.mmd          # redraw a Mermaid file
+/cloud-diagram:export-diagram my-diagram.svg        # re-render SVG → PNG (also accepts 1.x HTML)
 ```
 
 When redrawing you can pick the size (doc inline / wide / 16:9 slide / social card), detail level (faithful / balanced / simplified), and audience (engineer / mixed / executive); anything merged or dropped is reported in a fidelity ledger.
@@ -120,11 +120,11 @@ When redrawing you can pick the size (doc inline / wide / 16:9 slide / social ca
 ## Repository layout
 
 ```
-aws-diagram-design/
+cloud-diagram/
 ├── .claude-plugin/                 # Claude Code plugin manifest + marketplace catalog
 ├── plugin.json                     # Agent Plugins manifest (for Kiro Powers)
 ├── commands/                       # 3 slash commands (import-drawio / import-mermaid / export-diagram)
-├── skills/aws-diagram-design/      # canonical skill (shared by every environment)
+├── skills/aws-diagram/      # canonical skill (shared by every environment)
 │   ├── SKILL.md                    #   design system + routing for the 27 types
 │   ├── references/                 #   40 per-type specs (style-guide, type-*, primitive-aws-icons, …)
 │   ├── assets/                     #   templates & examples, aws-icons/ 812 SVGs, fonts/ Amazon Ember
@@ -134,6 +134,13 @@ aws-diagram-design/
 ├── docs/                           # per-environment guides + samples/ example diagrams
 └── install.sh                      # claude-code · kiro · fonts installers
 ```
+
+## Source
+
+Taken from hi-space's [hi-aws-skills](https://github.com/hi-space/hi-aws-skills) `plugins/aws-diagram-design` 2.3.0 (commit `8e00c8d`, MIT), with the plugin renamed to `cloud-diagram` and the skill to `aws-diagram`. The original copyright notice stays in `LICENSE`.
+
+- Lineage: [cathrynlavery/diagram-design](https://github.com/cathrynlavery/diagram-design) 2.3.2 → [masangbeom/aws-diagram-design](https://github.com/masangbeom/aws-diagram-design) 1.2.0 (AWS brand skin) → hi-aws-skills (Python generator `scripts/pygen/`) → this repo
+- 2.3.0 (2026-11-28): imported as-is; only the names changed.
 
 ## License
 

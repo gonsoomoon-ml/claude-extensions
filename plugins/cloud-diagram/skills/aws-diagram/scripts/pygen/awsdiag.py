@@ -1,4 +1,4 @@
-"""awsdiag — programmatic SVG generator for the aws-diagram-design skill (AWS brand skin).
+"""awsdiag — programmatic SVG generator for the aws-diagram skill (AWS brand skin).
 
 Encodes the skill's mandatory rules in code so a spec only supplies layout and text:
 white paper, squid-ink text, smile-orange accent on 1-2 focal nodes, Amazon Ember type at the
